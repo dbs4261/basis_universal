@@ -1,6 +1,11 @@
-project(basisu)
+cmake_minimum_required(VERSION 3.11)
 
-cmake_minimum_required(VERSION 3.0)
+project(basisu
+	VERSION 1.16.4
+	LANGUAGES C CXX
+	HOMEPAGE_URL "https://github.com/BinomialLLC/basis_universal"
+)
+
 option(STATIC "static linking" FALSE)
 option(SAN "sanitize" FALSE)
 
