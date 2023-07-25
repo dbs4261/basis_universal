@@ -22,13 +22,12 @@ else()
 	option(BUILD_X64 "build 64-bit" TRUE)
 endif()
 
-option(ZSTD "ZSTD support for KTX2 transcoding/encoding" TRUE)
+option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" TRUE)
 option(OPENCL "OpenCL support in encoder" FALSE)
 
 message("Initial BUILD_X64=${BUILD_X64}")
 message("Initial CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 message("Initial SSE=${SSE}")
-message("Initial ZSTD=${ZSTD}")
 message("Initial OPENCL=${OPENCL}")
 message("Initial SAN=${SAN}")
 
@@ -59,10 +58,15 @@ else()
 	message("SSE disabled")
 endif()
 
-if (ZSTD)
-	message("Zstandard enabled")
+if (BASISU_WITH_ZSTD)
+	include(cmake/zstd-provider.cmake)
+	if (NOT TARGET zstd::libzstd_static)
+		message(FATAL_ERROR "Zstandard was requested but neither could be found nor compiled from source")
+	else()
+		message(STATUS "Zstandard enabled")
+	endif()
 else()
-	message("Zstandard disabled")
+	message(STATUS "Zstandard disabled")
 endif()
 
 if (NOT MSVC)
@@ -97,7 +101,7 @@ if (NOT MSVC)
 	  	set(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -DBASISU_SUPPORT_SSE=0")
 		set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -DBASISU_SUPPORT_SSE=0")
 	  endif()
-	  
+
 	  set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} ${GCC_LINK_FLAGS} -static-libgcc -static-libstdc++ -static")
    else()
    	  if (SSE)
@@ -148,11 +152,7 @@ set(BASISU_SRC_LIST ${COMMON_SRC_LIST}
 	encoder/basisu_opencl.cpp
 	encoder/pvpngreader.cpp
 	transcoder/basisu_transcoder.cpp
-	)
-
-if (ZSTD)
-	set(BASISU_SRC_LIST ${BASISU_SRC_LIST} zstd/zstd.c)
-endif()
+)
 
 if (APPLE)
    set(BIN_DIRECTORY "bin_osx")
@@ -164,11 +164,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${BIN_DIRECTORY})
 
 add_executable(basisu ${BASISU_SRC_LIST})
 
-if (ZSTD)
-	target_compile_definitions(basisu PRIVATE BASISD_SUPPORT_KTX2_ZSTD=1)
-else()
-	target_compile_definitions(basisu PRIVATE BASISD_SUPPORT_KTX2_ZSTD=0)
-endif()
+target_link_libraries(basisu
+	PRIVATE
+		$<$<BOOL:${BASISU_WITH_ZSTD}>:zstd::libzstd_static>
+)
+
+target_compile_definitions(basisu
+	PRIVATE
+		BASISD_SUPPORT_KTX2_ZSTD=$<BOOL:${BASISU_WITH_ZSTD}>
+)
 
 if (NOT MSVC)
 	# For Non-Windows builds, let cmake try and find the system OpenCL headers/libs for us.
@@ -198,12 +202,12 @@ else()
 endif()	
 
 if (NOT MSVC)
-   target_link_libraries(basisu m pthread ${BASISU_EXTRA_LIBS})
+   target_link_libraries(basisu PRIVATE m pthread ${BASISU_EXTRA_LIBS})
 endif()
 
 if (NOT EMSCRIPTEN)
 	install(TARGETS basisu DESTINATION bin)
-	
+
 	if (UNIX)
 		if (CMAKE_BUILD_TYPE STREQUAL Release)
 			if (APPLE)
