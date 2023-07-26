@@ -79,6 +79,13 @@ target_link_libraries(basisu_encoder
 
 target_compile_definitions(basisu_encoder PRIVATE
     BASISD_SUPPORT_KTX2_ZSTD=$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>
+    BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
+    BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>>
+)
+
+target_compile_options(basisu_encoder PRIVATE
+    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<CXX_COMPILER_ID:MSVC,EMSCRIPTEN>>>:-msse4.1>
+    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<CXX_COMPILER_ID:MSVC>>:/arch:SSE4.1>
 )
 
 install(TARGETS basisu_encoder EXPORT basisu-targets

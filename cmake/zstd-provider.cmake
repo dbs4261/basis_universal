@@ -20,6 +20,7 @@ if (NOT ZSTD_FOUND)
                     -DZSTD_BUILD_SHARED:BOOL=OFF"
     )
     FetchContent_MakeAvailable(zstd)
+    # Fix issue ZStandard has with the include directories when built as a sub-project
     FetchContent_GetProperties(zstd SOURCE_DIR ZSTD_SOURCE_DIR)
     target_include_directories(libzstd_static PUBLIC
         "$<BUILD_INTERFACE:${ZSTD_SOURCE_DIR}/lib>"
