@@ -36,6 +36,8 @@ set_target_properties(basisu_transcoder PROPERTIES
 target_compile_definitions(basisu_transcode PUBLIC $<$<CONFIG:Debug>:_DEBUG>)
 target_compile_definitions(basisu_transcode PRIVATE
     $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 set_target_compile_options(basisu_transcoder PRIVATE

@@ -10,6 +10,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" ON)
 option(BASISU_WITH_OPENCL_LOADER "OpenCL support in encoder" OFF)
 option(BASISU_WITH_SSE41 "Build basisu with sse4.1 acceleration" ON)
+option(BASISU_WITH_ASAN "Build basisu with address sanitizer" OFF)
 
 include(CheckLibraryExists)
 check_library_exists(m sin "" HAVE_LIB_M)

@@ -87,6 +87,8 @@ target_compile_definitions(basisu_encoder PUBLIC
 target_compile_definitions(basisu_encoder PRIVATE
     BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
     $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 target_compile_options(basisu_encoder PRIVATE
