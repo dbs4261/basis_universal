@@ -53,6 +53,8 @@ else()
 endif()
 add_library(basisu::encoder ALIAS basisu_encoder)
 
+target_compile_features(basisu_encoder PRIVATE cxx_std_11)
+
 target_include_directories(basisu_encoder PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/basisu/>
@@ -77,10 +79,14 @@ target_link_libraries(basisu_encoder
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
 )
 
-target_compile_definitions(basisu_encoder PRIVATE
+target_compile_definitions(basisu_encoder PUBLIC
+    $<$<CONFIG:Debug>:_DEBUG>
     BASISD_SUPPORT_KTX2_ZSTD=$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>
-    BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
     BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>>
+)
+target_compile_definitions(basisu_encoder PRIVATE
+    BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
+    $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
 )
 
 target_compile_options(basisu_encoder PRIVATE
