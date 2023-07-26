@@ -11,7 +11,7 @@
 // TRNS chunks are converted to alpha as needed.
 // GAMA chunk is read, but not applied.
 
-#include "../transcoder/basisu.h"
+#include "transcoder/basisu.h"
 
 #define MINIZ_HEADER_FILE_ONLY
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES

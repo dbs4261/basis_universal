@@ -9,6 +9,9 @@ project(basisu
 option(STATIC "static linking" FALSE)
 option(SAN "sanitize" FALSE)
 
+include(CheckLibraryExists)
+check_library_exists(m sin "" HAVE_LIB_M)
+
 # For MSVC builds default to SSE enabled, and determine if it's a 64-bit (-A x64) vs. 32-bit (-A Win32) build.
 if (MSVC)
 	option(SSE "SSE 4.1 support" TRUE)
@@ -131,6 +134,9 @@ else()
 		set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -DBASISU_SUPPORT_SSE=0")
 	endif()
 endif()
+
+add_subdirectory(transcoder)
+add_subdirectory(encoder)
 
 set(BASISU_SRC_LIST ${COMMON_SRC_LIST} 
 	basisu_tool.cpp

@@ -16,7 +16,7 @@
 #include "basisu_resampler.h"
 #include "basisu_resampler_filters.h"
 #include "basisu_etc.h"
-#include "../transcoder/basisu_transcoder.h"
+#include "transcoder/basisu_transcoder.h"
 #include "basisu_bc7enc.h"
 #include "jpgd.h"
 #include "pvpngreader.h"
