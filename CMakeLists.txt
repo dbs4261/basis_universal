@@ -61,6 +61,12 @@ else()
 	message("SSE disabled")
 endif()
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
+if (NOT CMAKE_CXX_LTO_SUPPORTED)
+	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}")
+endif()
+
 if (BASISU_WITH_ZSTD)
 	include(cmake/zstd-provider.cmake)
 	if (NOT TARGET zstd::libzstd_static)
