@@ -1,10 +1,14 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.14)
 
 project(basisu
 	VERSION 1.16.4
-	LANGUAGES C CXX
+	LANGUAGES CXX
 	HOMEPAGE_URL "https://github.com/BinomialLLC/basis_universal"
 )
+
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release)
+endif()
 
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" ON)
