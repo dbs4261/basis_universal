@@ -24,11 +24,11 @@ target_include_directories(basisu_transcoder PUBLIC
 
 # TODO: If all minor versions are abi compatible, remove minor from SOVERSION
 set_target_properties(basisu_transcoder PROPERTIES
-    EXPORT_NAME basisu_transcoder
+    EXPORT_NAME transcoder
     VERSION "${basisu_VERSION}"
     SOVERSION "${basisu_VERSION_MAJOR}.${basisu_VERSION_MINOR}"
     INTERPROCEDURAL_OPTIMIZATION
-    $<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>, $<BOOL:${BASISU_ENABLE_IPO}>, $<NOT:$<CONFIG:Debug>>>
+        $<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
     POSITION_INDEPENDENT_CODE ON
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )

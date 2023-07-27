@@ -62,11 +62,11 @@ target_include_directories(basisu_encoder PUBLIC
 
 # TODO: If all minor versions are abi compatible, remove minor from SOVERSION
 set_target_properties(basisu_encoder PROPERTIES
-    EXPORT_NAME basisu_encoder
+    EXPORT_NAME encoder
     VERSION "${basisu_VERSION}"
     SOVERSION "${basisu_VERSION_MAJOR}.${basisu_VERSION_MINOR}"
     INTERPROCEDURAL_OPTIMIZATION
-        $<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>, $<BOOL:${BASISU_ENABLE_IPO}>, $<NOT:$<CONFIG:Debug>>>
+        $<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
     POSITION_INDEPENDENT_CODE ON
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )

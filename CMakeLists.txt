@@ -108,3 +108,36 @@ set_target_properties(basisu-tool PROPERTIES
 install(TARGETS basisu-tool
 	RUNTIME COMPONENT BasisU_Applications
 )
+
+install(EXPORT basisu-targets
+	FILE basisu-targets.cmake
+	NAMESPACE basisu::
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/basisu/
+	COMPONENT BasisUniversal_Development
+)
+
+install(FILES LICENSE README.md
+	DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/basisu/
+	COMPONENT BasisUniversal_Runtime NAMELINK_COMPONENT BasisUniversal_Development
+)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+	basisu-config-version.cmake
+	VERSION ${BASISU_VERSION}
+	COMPATIBILITY SameMinorVersion
+)
+
+configure_package_config_file(
+	${CMAKE_CURRENT_LIST_DIR}/cmake/basisu-config.cmake.in
+	${CMAKE_CURRENT_BINARY_DIR}/basisu-config.cmake
+	INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/basisu/
+)
+
+install(FILES
+	${CMAKE_CURRENT_BINARY_DIR}/basisu-config.cmake
+	${CMAKE_CURRENT_BINARY_DIR}/basisu-config-version.cmake
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/basisu/
+	COMPONENT BasisUniversal_Development
+)
+
