@@ -11,62 +11,21 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+option(BASISU_BUILD_SHARED_LIBS "Build BasisU with shared libraries" ${BUILD_SHARED_LIBS})
 option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" ON)
 option(BASISU_WITH_OPENCL_LOADER "OpenCL support in encoder" OFF)
 option(BASISU_WITH_SSE41 "Build basisu with sse4.1 acceleration" ON)
 option(BASISU_WITH_ASAN "Build basisu with address sanitizer" OFF)
 
+message(STATUS "${PROJECT_NAME} build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "BasisU requested build shared libraries: ${BASISU_BUILD_SHARED_LIBS}")
+message(STATUS "BasisU requested ZStandard support: ${BASISU_WITH_ZSTD}")
+message(STATUS "BasisU requested OpenCL support: ${BASISU_WITH_OPENCL_LOADER}")
+message(STATUS "BasisU requested SSE4.1 support: ${BASISU_WITH_SSE41}")
+message(STATUS "BasisU requested Address Sanitizer support: ${BASISU_WITH_ASAN}")
+
 include(CheckLibraryExists)
 check_library_exists(m sin "" HAVE_LIB_M)
-
-# For MSVC builds default to SSE enabled, and determine if it's a 64-bit (-A x64) vs. 32-bit (-A Win32) build.
-if (MSVC)
-	option(SSE "SSE 4.1 support" TRUE)
-	if ( CMAKE_GENERATOR_PLATFORM STREQUAL Win32 )	
-		set(BUILD_X64 0)
-	else()
-		set(BUILD_X64 1)
-	endif()
-else()
-	option(SSE "SSE 4.1 support" FALSE)
-	option(BUILD_X64 "build 64-bit" TRUE)
-endif()
-
-option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" TRUE)
-option(OPENCL "OpenCL support in encoder" FALSE)
-
-message("Initial BUILD_X64=${BUILD_X64}")
-message("Initial CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
-message("Initial SSE=${SSE}")
-message("Initial OPENCL=${OPENCL}")
-message("Initial SAN=${SAN}")
-
-if (NOT MSVC)
-	# With MSVC builds we use the Khronos lib/include files in the project's "OpenCL" directory, to completely avoid requiring fiddly to install vendor SDK's.
-	# Otherwise we use the system's (if any).
-	find_package( OpenCL )
-	message(STATUS "OpenCL found: ${OPENCL_FOUND}")
-	message(STATUS "OpenCL includes: ${OpenCL_INCLUDE_DIRS}")
-	message(STATUS "OpenCL libraries: ${OpenCL_LIBRARIES}")
-endif()
-
-if( NOT CMAKE_BUILD_TYPE )
-  set( CMAKE_BUILD_TYPE Release )
-endif()
-
-message( ${PROJECT_NAME} " build type: " ${CMAKE_BUILD_TYPE} )
-
-if (BUILD_X64)
-	message("Building 64-bit")
-else()
-	message("Building 32-bit")
-endif()
-
-if (SSE)
-	message("SSE enabled")
-else()
-	message("SSE disabled")
-endif()
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
