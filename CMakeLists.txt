@@ -81,16 +81,16 @@ endif()
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
 
-add_executable(basisu basisu_tool.cpp)
+add_executable(basisu-tool basisu_tool.cpp)
 
-target_link_libraries(basisu PRIVATE basisu::encoder)
-target_compile_features(basisu INTERFACE c_std_99 cxx_std_11)
-target_compile_definitions(basisu PRIVATE
+target_link_libraries(basisu-tool PRIVATE basisu::encoder)
+target_compile_features(basisu-tool INTERFACE c_std_99 cxx_std_11)
+target_compile_definitions(basisu-tool PRIVATE
 	BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
 	$<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
 		-fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
-target_compile_options(basisu PRIVATE
+target_compile_options(basisu-tool PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
 	$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value;-Wno-reorder;-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
@@ -99,7 +99,12 @@ target_compile_options(basisu PRIVATE
 	$<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
 	$<$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN,MSVC>>:-Wno-pedantic>
 )
+set_target_properties(basisu-tool PROPERTIES
+	INTERPROCEDURAL_OPTIMIZATION
+		$<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
+	POSITION_INDEPENDENT_CODE ON
+)
 
-install(TARGETS basisu
+install(TARGETS basisu-tool
 	RUNTIME COMPONENT BasisU_Applications
 )
