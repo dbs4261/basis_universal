@@ -103,16 +103,3 @@ target_compile_options(basisu PRIVATE
 install(TARGETS basisu
 	RUNTIME COMPONENT BasisU_Applications
 )
-
-if (NOT EMSCRIPTEN)
-
-	if (UNIX)
-		if (CMAKE_BUILD_TYPE STREQUAL Release)
-			if (APPLE)
-				add_custom_command(TARGET basisu POST_BUILD COMMAND strip -X -x ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/basisu)
-			else()
-				add_custom_command(TARGET basisu POST_BUILD COMMAND strip -g -X -x ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/basisu)
-			endif()
-		endif()
-	endif()
-endif()
