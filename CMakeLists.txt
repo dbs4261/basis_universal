@@ -24,6 +24,27 @@ message(STATUS "BasisU requested OpenCL support: ${BASISU_WITH_OPENCL_LOADER}")
 message(STATUS "BasisU requested SSE4.1 support: ${BASISU_WITH_SSE41}")
 message(STATUS "BasisU requested Address Sanitizer support: ${BASISU_WITH_ASAN}")
 
+# Notify about deprecated options
+if (DEFINED BUILD_X64)
+	message(DEPRECATION "BUILD_X64 option has been removed. Either add -DCMAKE_CXX_FLAGS=\"-m32\" "
+			"on Linux or pass -A Win32 on Windows to the cmake configure command")
+endif()
+if (DEFINED SSE)
+	message(DEPRECATION "SSE option has been renamed to BASISU_WITH_SSE41")
+endif()
+if (DEFINED ZSTD)
+	message(DEPRECATION "ZSTD option has been renamed to BASISU_WITH_ZSTD")
+endif()
+if (DEFINED OPENCL)
+	message(DEPRECATION "OPENCL option has been renamed to BASISU_WITH_OPENCL_LOADER")
+endif()
+if (DEFINED SAN)
+	message(DEPRECATION "SAN option has been renamed to BASISU_WITH_ASAN")
+endif()
+if (DEFINED STATIC)
+	message(DEPRECATION "STATIC option has been depreciated in favor of BUILD_STATIC_LIBS and BASISU_BUILD_STATIC_LIBS")
+endif()
+
 include(CheckLibraryExists)
 check_library_exists(m sin "" HAVE_LIB_M)
 
