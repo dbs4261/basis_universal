@@ -45,6 +45,8 @@ if (DEFINED STATIC)
 	message(DEPRECATION "STATIC option has been depreciated in favor of BUILD_STATIC_LIBS and BASISU_BUILD_STATIC_LIBS")
 endif()
 
+include(GNUInstallDirs)
+
 include(CheckLibraryExists)
 check_library_exists(m sin "" HAVE_LIB_M)
 

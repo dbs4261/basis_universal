@@ -33,16 +33,26 @@ set_target_properties(basisu_transcoder PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
-target_compile_definitions(basisu_transcode PUBLIC $<$<CONFIG:Debug>:_DEBUG>)
-target_compile_definitions(basisu_transcode PRIVATE
+target_link_libraries(basisu_transcoder PRIVATE
+    $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
+)
+
+target_compile_definitions(basisu_transcoder PUBLIC $<$<CONFIG:Debug>:_DEBUG>)
+target_compile_definitions(basisu_transcoder PRIVATE
     $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
         -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
-set_target_compile_options(basisu_transcoder PRIVATE
-    $<$<CXX_COMPILER_ID:GNU>:-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable;-Wno-class-memaccess;-Wno-maybe-uninitialized>
-    $<$<AND:$<CXX_COMPILER_ID:Clang>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,14.0>
+target_compile_options(basisu_transcoder PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable;-Wno-unused-value;-Wno-class-memaccess;-Wno-maybe-uninitialized>
+    $<$<AND:$<CXX_COMPILER_ID:Clang>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,14.0>>:-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
+    $<$<CXX_COMPILER_ID:EMSCRIPTEN>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+    $<$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN,MSVC>>:-Wno-pedantic>
 )
 
 # Format Support
