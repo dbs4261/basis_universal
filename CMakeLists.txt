@@ -86,7 +86,7 @@ add_executable(basisu-tool basisu_tool.cpp)
 target_link_libraries(basisu-tool PRIVATE basisu::encoder)
 target_compile_features(basisu-tool INTERFACE c_std_99 cxx_std_11)
 target_compile_definitions(basisu-tool PRIVATE
-	BASISU_SUPPORT_OPENCL=$<BOOL:BASISU_WITH_OPENCL_LOADER>
+	BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
 	$<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
 		-fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
