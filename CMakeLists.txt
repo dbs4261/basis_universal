@@ -78,6 +78,8 @@ else()
 	message(STATUS "OpenCL disabled")
 endif()
 
+find_package(TBB REQUIRED)
+
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
 

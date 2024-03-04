@@ -3622,7 +3622,7 @@ static bool bench_mode(command_line_params& opts)
 			p.m_max_allowed_rms_increase_ratio = 10.0f;
 			p.m_skip_block_rms_thresh = 8.0f;
 			
-			bool rdo_status = uastc_rdo((uint32_t)ublocks.size(), &ublocks[0], &orig_block_pixels[0], p, flags, &jpool, max_rdo_jobs);
+			bool rdo_status = uastc_rdo((uint32_t)ublocks.size(), &ublocks[0], &orig_block_pixels[0], p, flags);
 			if (!rdo_status)
 			{
 				printf("uastc_rdo() failed!\n");

@@ -17,6 +17,10 @@
 #include <unordered_set>
 #include <atomic>
 
+#include <tbb/parallel_for.h>
+#include <tbb/blocked_range.h>
+#include <tbb/partitioner.h>
+
 // basisu_transcoder.cpp is where basisu_miniz lives now, we just need the declarations here.
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include "basisu_miniz.h"
@@ -356,8 +360,7 @@ namespace basisu
 				rdo_params.m_max_smooth_block_std_dev = m_params.m_rdo_uastc_smooth_block_max_std_dev;
 								
 				bool status = uastc_rdo(tex.get_total_blocks(), (basist::uastc_block*)tex.get_ptr(),
-					(const color_rgba *)m_source_blocks[slice_desc.m_first_block_index].m_pixels, rdo_params, m_params.m_pack_uastc_flags, m_params.m_rdo_uastc_multithreading ? m_params.m_pJob_pool : nullptr,
-					(m_params.m_rdo_uastc_multithreading && m_params.m_pJob_pool) ? basisu::minimum<uint32_t>(4, (uint32_t)m_params.m_pJob_pool->get_total_threads()) : 0);
+					(const color_rgba *)m_source_blocks[slice_desc.m_first_block_index].m_pixels, rdo_params, m_params.m_pack_uastc_flags);
 				if (!status)
 				{
 					return cECFailedUASTCRDOPostProcess;

@@ -77,6 +77,7 @@ target_link_libraries(basisu_encoder
         $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
         $<$<AND:$<BOOL:${BASISU_WITH_OPENCL_LOADER}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
+        TBB::tbb
 )
 
 target_compile_definitions(basisu_encoder PUBLIC

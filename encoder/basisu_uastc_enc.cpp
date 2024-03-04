@@ -14,6 +14,9 @@
 // limitations under the License.
 #include "basisu_uastc_enc.h"
 
+#include <tbb/parallel_reduce.h>
+#include <tbb/blocked_range.h>
+
 #if BASISU_USE_ASTC_DECOMPRESS
 #include "basisu_astc_decomp.h"
 #endif
@@ -4124,68 +4127,41 @@ namespace basisu
 	// It only changes selectors and then updates the hints. It uses very approximate LZ bitprice estimation.
 	// There's A LOT that can be done better in here, but it's a start.
 	// One nice advantage of the method used here is that it works for any input, no matter which or how many modes it uses.
-	bool uastc_rdo(uint32_t num_blocks, basist::uastc_block* pBlocks, const color_rgba* pBlock_pixels, const uastc_rdo_params& params, uint32_t flags, job_pool* pJob_pool, uint32_t total_jobs)
+	bool uastc_rdo(uint32_t num_blocks, basist::uastc_block* pBlocks, const color_rgba* pBlock_pixels, const uastc_rdo_params& params, uint32_t flags)
 	{
 		assert(params.m_max_allowed_rms_increase_ratio > 1.0f);
 		assert(params.m_lz_dict_size > 0);
 		assert(params.m_lambda > 0.0f);
 
-		uint32_t total_skipped = 0, total_modified = 0, total_refined = 0, total_smooth = 0;
-
-		uint32_t blocks_per_job = total_jobs ? (num_blocks / total_jobs) : 0;
-
-		std::mutex stat_mutex;
-
-		bool status = false;
-
-		if ((!pJob_pool) || (total_jobs <= 1) || (blocks_per_job <= 8))
-		{
-			status = uastc_rdo_blocks(0, num_blocks, pBlocks, pBlock_pixels, params, flags, total_skipped, total_refined, total_modified, total_smooth);
-		}
-		else
-		{
+		struct Stats {
+			uint32_t total_skipped = 0;
+			uint32_t total_modified = 0;
+			uint32_t total_refined = 0;
+			uint32_t total_smooth = 0;
 			bool all_succeeded = true;
 
-			for (uint32_t block_index_iter = 0; block_index_iter < num_blocks; block_index_iter += blocks_per_job)
-			{
-				const uint32_t first_index = block_index_iter;
-				const uint32_t last_index = minimum<uint32_t>(num_blocks, block_index_iter + blocks_per_job);
+			Stats operator+(const Stats& other) const {
+				return {total_skipped + other.total_skipped,
+						total_modified + other.total_modified,
+						total_refined + other.total_refined,
+						total_smooth + other.total_smooth,
+						all_succeeded && other.all_succeeded};
+			}
+		};
 
-#ifndef __EMSCRIPTEN__
-				pJob_pool->add_job([first_index, last_index, pBlocks, pBlock_pixels, &params, flags, &total_skipped, &total_modified, &total_refined, &total_smooth, &all_succeeded, &stat_mutex] {
-#endif
+		Stats stats = tbb::parallel_reduce(tbb::blocked_range<uint32_t>(0, num_blocks, num_blocks / 4),
+				Stats{}, [&](const tbb::blocked_range<uint32_t>& r, const Stats& stats)->Stats{
+			Stats out{};
+			out.all_succeeded = uastc_rdo_blocks(r.begin(), r.end(), pBlocks, pBlock_pixels, params, flags,
+				out.total_skipped, out.total_refined, out.total_modified, out.total_smooth);
+			return out + stats;
+		}, std::plus<Stats>{});
 
-					uint32_t job_skipped = 0, job_modified = 0, job_refined = 0, job_smooth = 0;
+		debug_printf("uastc_rdo: Total modified: %3.2f%%, total skipped: %3.2f%%, total refined: %3.2f%%, total smooth: %3.2f%%\n",
+					 stats.total_modified * 100.0f / num_blocks, stats.total_skipped * 100.0f / num_blocks,
+					 stats.total_refined * 100.0f / num_blocks, stats.total_smooth * 100.0f / num_blocks);
 
-					bool status = uastc_rdo_blocks(first_index, last_index, pBlocks, pBlock_pixels, params, flags, job_skipped, job_refined, job_modified, job_smooth);
-
-					{
-						std::lock_guard<std::mutex> lck(stat_mutex);
-						
-						all_succeeded = all_succeeded && status;
-						total_skipped += job_skipped;
-						total_modified += job_modified;
-						total_refined += job_refined;
-						total_smooth += job_smooth;
-					}
-
-#ifndef __EMSCRIPTEN__
-					}
-				);
-#endif
-
-			} // block_index_iter
-
-#ifndef __EMSCRIPTEN__
-			pJob_pool->wait_for_all();
-#endif
-
-			status = all_succeeded;
-		}
-
-		debug_printf("uastc_rdo: Total modified: %3.2f%%, total skipped: %3.2f%%, total refined: %3.2f%%, total smooth: %3.2f%%\n", total_modified * 100.0f / num_blocks, total_skipped * 100.0f / num_blocks, total_refined * 100.0f / num_blocks, total_smooth * 100.0f / num_blocks);
-				
-		return status;
+		return stats.all_succeeded;
 	}
 } // namespace basisu
 
