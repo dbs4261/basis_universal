@@ -4149,7 +4149,7 @@ namespace basisu
 			}
 		};
 
-		Stats stats = tbb::parallel_reduce(tbb::blocked_range<uint32_t>(0, num_blocks, num_blocks / 4),
+		Stats stats = tbb::parallel_reduce(tbb::blocked_range<uint32_t>(0, num_blocks, 4096),
 				Stats{}, [&](const tbb::blocked_range<uint32_t>& r, const Stats& stats)->Stats{
 			Stats out{};
 			out.all_succeeded = uastc_rdo_blocks(r.begin(), r.end(), pBlocks, pBlock_pixels, params, flags,

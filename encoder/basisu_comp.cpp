@@ -20,6 +20,7 @@
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 #include <tbb/partitioner.h>
+#include <tbb/task.h>
 
 // basisu_transcoder.cpp is where basisu_miniz lives now, we just need the declarations here.
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
@@ -284,9 +285,11 @@ namespace basisu
 		m_uastc_backend_output.m_slice_desc = m_slice_descs;
 		m_uastc_backend_output.m_slice_image_data.resize(m_slice_descs.size());
 		m_uastc_backend_output.m_slice_image_crcs.resize(m_slice_descs.size());
-				
-		for (uint32_t slice_index = 0; slice_index < m_slice_descs.size(); slice_index++)
-		{
+
+		bool rdo_failed = false;
+
+		tbb::parallel_for(uint32_t{0}, m_slice_descs.size(),
+				[&](uint32_t slice_index) {
 			gpu_image& tex = m_uastc_slice_textures[slice_index];
 			basisu_backend_slice_desc& slice_desc = m_slice_descs[slice_index];
 			(void)slice_desc;
@@ -295,62 +298,36 @@ namespace basisu
 			const uint32_t num_blocks_y = tex.get_blocks_y();
 			const uint32_t total_blocks = tex.get_total_blocks();
 			const image& source_image = m_slice_images[slice_index];
-			
-			std::atomic<uint32_t> total_blocks_processed;
-			total_blocks_processed = 0;
+			BASISU_NOTE_UNUSED(num_blocks_y);
 
-			const uint32_t N = 256;
-			for (uint32_t block_index_iter = 0; block_index_iter < total_blocks; block_index_iter += N)
-			{
-				const uint32_t first_index = block_index_iter;
-				const uint32_t last_index = minimum<uint32_t>(total_blocks, block_index_iter + N);
+			const uint32_t uastc_flags = ((m_params.m_rdo_uastc) && (m_params.m_rdo_uastc_favor_simpler_modes_in_rdo_mode)) ?
+				m_params.m_pack_uastc_flags | cPackUASTCFavorSimplerModes : m_params.m_pack_uastc_flags;
 
-				// FIXME: This sucks, but we're having a stack size related problem with std::function with emscripten.
-#ifndef __EMSCRIPTEN__
-				m_params.m_pJob_pool->add_job([this, first_index, last_index, num_blocks_x, num_blocks_y, total_blocks, &source_image, &tex, &total_blocks_processed]
-					{
-#endif
-						BASISU_NOTE_UNUSED(num_blocks_y);
-						
-						uint32_t uastc_flags = m_params.m_pack_uastc_flags;
-						if ((m_params.m_rdo_uastc) && (m_params.m_rdo_uastc_favor_simpler_modes_in_rdo_mode))
-							uastc_flags |= cPackUASTCFavorSimplerModes;
+			std::atomic<uint32_t> total_blocks_processed{0};
 
-						for (uint32_t block_index = first_index; block_index < last_index; block_index++)
-						{
-							const uint32_t block_x = block_index % num_blocks_x;
-							const uint32_t block_y = block_index / num_blocks_x;
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, total_blocks, 256),
+					[&](const tbb::blocked_range<uint32_t>& range) {
+				for (uint32_t block_index = range.begin(); block_index < range.end(); ++block_index) {
+					const uint32_t block_x = block_index % num_blocks_x;
+					const uint32_t block_y = block_index / num_blocks_x;
 
-							color_rgba block_pixels[4][4];
+					color_rgba block_pixels[4][4];
 
-							source_image.extract_block_clamped((color_rgba*)block_pixels, block_x * 4, block_y * 4, 4, 4);
+					source_image.extract_block_clamped((color_rgba*)block_pixels, block_x * 4, block_y * 4, 4, 4);
 
-							basist::uastc_block& dest_block = *(basist::uastc_block*)tex.get_block_ptr(block_x, block_y);
+					basist::uastc_block& dest_block = *(basist::uastc_block*)tex.get_block_ptr(block_x, block_y);
 
-							encode_uastc(&block_pixels[0][0].r, dest_block, uastc_flags);
+					encode_uastc(&block_pixels[0][0].r, dest_block, uastc_flags);
 
-							total_blocks_processed++;
-							
-							uint32_t val = total_blocks_processed;
-							if ((val & 16383) == 16383)
-							{
-								debug_printf("basis_compressor::encode_slices_to_uastc: %3.1f%% done\n", static_cast<float>(val) * 100.0f / total_blocks);
-							}
+					const uint32_t val = total_blocks_processed.fetch_add(1);
+					if ((val & 16383) == 16383) {
+						debug_printf("basis_compressor::encode_slices_to_uastc: slice[%lu] %3.1f%% done\n",
+									 static_cast<unsigned long>(slice_index), static_cast<float>(val) * 100.0f / total_blocks);
+					}
+				}
+			});
 
-						}
-
-#ifndef __EMSCRIPTEN__
-					});
-#endif
-
-			} // block_index_iter
-
-#ifndef __EMSCRIPTEN__
-			m_params.m_pJob_pool->wait_for_all();
-#endif
-
-			if (m_params.m_rdo_uastc)
-			{
+			if (m_params.m_rdo_uastc) {
 				uastc_rdo_params rdo_params;
 				rdo_params.m_lambda = m_params.m_rdo_uastc_quality_scalar;
 				rdo_params.m_max_allowed_rms_increase_ratio = m_params.m_rdo_uastc_max_allowed_rms_increase_ratio;
@@ -358,23 +335,22 @@ namespace basisu
 				rdo_params.m_lz_dict_size = m_params.m_rdo_uastc_dict_size;
 				rdo_params.m_smooth_block_max_error_scale = m_params.m_rdo_uastc_max_smooth_block_error_scale;
 				rdo_params.m_max_smooth_block_std_dev = m_params.m_rdo_uastc_smooth_block_max_std_dev;
-								
+
 				bool status = uastc_rdo(tex.get_total_blocks(), (basist::uastc_block*)tex.get_ptr(),
 					(const color_rgba *)m_source_blocks[slice_desc.m_first_block_index].m_pixels, rdo_params, m_params.m_pack_uastc_flags);
-				if (!status)
-				{
-					return cECFailedUASTCRDOPostProcess;
+				if (!status) {
+					rdo_failed = true;
+					tbb::task::current_context()->cancel_group_execution();
 				}
 			}
 
 			m_uastc_backend_output.m_slice_image_data[slice_index].resize(tex.get_size_in_bytes());
 			memcpy(&m_uastc_backend_output.m_slice_image_data[slice_index][0], tex.get_ptr(), tex.get_size_in_bytes());
-			
+
 			m_uastc_backend_output.m_slice_image_crcs[slice_index] = basist::crc16(tex.get_ptr(), tex.get_size_in_bytes(), 0);
-						
-		} // slice_index
+		});
 				
-		return cECSuccess;
+		return rdo_failed ? cECFailedUASTCRDOPostProcess : cECSuccess;
 	}
 
 	bool basis_compressor::generate_mipmaps(const image &img, basisu::vector<image> &mips, bool has_alpha)
