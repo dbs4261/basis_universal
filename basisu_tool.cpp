@@ -3276,7 +3276,7 @@ static bool bench_mode(command_line_params& opts)
 		}
 #endif
 
-		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, total_blocks, 128),
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, total_blocks, 256),
 				[&img, num_blocks_x, num_blocks_y,
 				&opt_bc1_img, &opt_bc1_2_img, &mode_hist, &overall_mode_hist, &uastc_img, &uastc2_img, &bc7_img, &part_img, &mode_hist_mutex, &bc1_img, &etc1_img, &etc1_g_img, &etc2_img, &etc1_hint_hist, &perceptual,
 				&total_bc1_hint0s, &total_bc1_hint1s, &total_bc1_hint01s, &bc3_img, &total_enc_time, &eac_r11_img, &eac_rg11_img, &ublocks, &flags, &etc1_inten_hist, &etc1_flip_hist, &etc1_diff_hist, &total_bench_time, &total_bench2_time,

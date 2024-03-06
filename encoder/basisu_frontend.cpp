@@ -353,7 +353,7 @@ namespace basisu
 		static constexpr uint32_t NUM_PASSES = 3;
 		for (uint32_t pass = 0; pass < NUM_PASSES; pass++) {
 			debug_printf("init_global_codebooks: pass %u\n", pass);
-			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_total_blocks, 128),
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_total_blocks, 256),
 					[&](const tbb::blocked_range<uint32_t>& r) {
 				for (uint32_t block_index = r.begin(); block_index < r.end(); ++block_index) {
 					const etc_block& blk = pass == 0 ? m_encoded_blocks[block_index] : m_etc1_blocks_etc1s[block_index];
@@ -411,7 +411,7 @@ namespace basisu
 
 			m_block_selector_cluster_index.resize(m_total_blocks);
 
-			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_total_blocks, 128),
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_total_blocks, 256),
 			        [&](const tbb::blocked_range<uint32_t>& r) {
 			    for (uint32_t block_index = r.begin(); block_index < r.end(); ++block_index) {
 					const uint32_t block_endpoint_index = m_block_endpoint_clusters_indices[block_index][0];
@@ -1346,7 +1346,7 @@ namespace basisu
 		} // if (opencl_is_available() && m_params.m_use_opencl)
 
 		if (use_cpu) {
-			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_endpoint_clusters.size(), 128),
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, m_endpoint_clusters.size(), 256),
 			        [&](const tbb::blocked_range<uint32_t>& r) {
 			    for (uint32_t cluster_index = r.begin(); cluster_index < r.end(); ++cluster_index) {
 					const basisu::vector<uint32_t>& cluster_indices = m_endpoint_clusters[cluster_index];
