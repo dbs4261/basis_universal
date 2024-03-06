@@ -760,17 +760,11 @@ namespace basisu
 		debug_printf("Begin endpoint quantization\n");
 
 		const uint32_t parent_codebook_size = (m_params.m_max_endpoint_clusters >= 256) ? BASISU_ENDPOINT_PARENT_CODEBOOK_SIZE : 0;
-		uint32_t max_threads = 0;
-		max_threads = m_params.m_multithreaded ? minimum<int>(std::thread::hardware_concurrency(), cMaxCodebookCreationThreads) : 0;
-		if (m_params.m_pJob_pool)
-			max_threads = minimum<int>((int)m_params.m_pJob_pool->get_total_threads(), max_threads);
 
-		debug_printf("max_threads: %u\n", max_threads);
 		bool status = generate_hierarchical_codebook_threaded(m_endpoint_clusterizer,
 			m_params.m_max_endpoint_clusters, m_use_hierarchical_endpoint_codebooks ? parent_codebook_size : 0,
 			m_endpoint_clusters,
-			m_endpoint_parent_clusters,
-			max_threads, m_params.m_pJob_pool, true);
+			m_endpoint_parent_clusters, true);
 		BASISU_FRONTEND_VERIFY(status);
 
 		if (m_use_hierarchical_endpoint_codebooks)
@@ -1979,16 +1973,10 @@ namespace basisu
 		const uint32_t parent_codebook_size = (m_params.m_max_selector_clusters >= 256) ? selector_parent_codebook_size : 0;
 		debug_printf("Using selector parent codebook size %u\n", parent_codebook_size);
 
-		uint32_t max_threads = 0;
-		max_threads = m_params.m_multithreaded ? minimum<int>(std::thread::hardware_concurrency(), cMaxCodebookCreationThreads) : 0;
-		if (m_params.m_pJob_pool)
-			max_threads = minimum<int>((int)m_params.m_pJob_pool->get_total_threads(), max_threads);
-
 		bool status = generate_hierarchical_codebook_threaded(selector_clusterizer,
 			m_params.m_max_selector_clusters, m_use_hierarchical_selector_codebooks ? parent_codebook_size : 0,
 			m_selector_cluster_block_indices,
-			m_selector_parent_cluster_block_indices,
-			max_threads, m_params.m_pJob_pool, false);
+			m_selector_parent_cluster_block_indices, false);
 		BASISU_FRONTEND_VERIFY(status);
 
 		if (m_use_hierarchical_selector_codebooks)

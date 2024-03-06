@@ -24,6 +24,9 @@
 #include <unordered_map>
 #include <ostream>
 
+#include <tbb/parallel_for.h>
+#include <tbb/task.h>
+
 #if !defined(_WIN32) || defined(__MINGW32__)
 #include <libgen.h>
 #endif
@@ -1927,13 +1930,15 @@ namespace basisu
 	bool generate_hierarchical_codebook_threaded_internal(Quantizer& q,
 		uint32_t max_codebook_size, uint32_t max_parent_codebook_size,
 		basisu::vector<uint_vec>& codebook,
-		basisu::vector<uint_vec>& parent_codebook,
-		uint32_t max_threads, bool limit_clusterizers, job_pool *pJob_pool)
+		basisu::vector<uint_vec>& parent_codebook, bool limit_clusterizers)
 	{
+		uint32_t max_threads = tbb::this_task_arena::max_concurrency();
 		codebook.resize(0);
 		parent_codebook.resize(0);
 
-		if ((max_threads <= 1) || (q.get_training_vecs().size() < 256) || (max_codebook_size < max_threads * 16))
+		// Not sure why compare the training vec size against 65536*4
+		// but thats the threshold from generate_hierarchical_codebook_threaded
+		if ((max_threads <= 1) || (q.get_training_vecs().size() < 65536*4) || (max_codebook_size < max_threads * 16))
 		{
 			if (!q.generate(max_codebook_size))
 				return false;
@@ -1946,117 +1951,92 @@ namespace basisu
 			return true;
 		}
 
-		const uint32_t cMaxThreads = 16;
-		if (max_threads > cMaxThreads)
-			max_threads = cMaxThreads;
-
-		if (!q.generate(max_threads))
+		// Generate extra work so work stealing makes some sense
+		if (!q.generate(max_threads * 4))
 			return false;
 
 		basisu::vector<uint_vec> initial_codebook;
 
 		q.retrieve(initial_codebook);
-
-		if (initial_codebook.size() < max_threads)
-		{
-			codebook = initial_codebook;
-
-			if (max_parent_codebook_size)
-				q.retrieve(max_parent_codebook_size, parent_codebook);
-
-			return true;
-		}
-
-		Quantizer quantizers[cMaxThreads];
 		
-		bool success_flags[cMaxThreads];
-		clear_obj(success_flags);
+		bool success = true;
 
-		basisu::vector<uint_vec> local_clusters[cMaxThreads];
-		basisu::vector<uint_vec> local_parent_clusters[cMaxThreads];
+		std::vector<basisu::vector<uint_vec>> local_clusters(initial_codebook.size());
+		std::vector<basisu::vector<uint_vec>> local_parent_clusters(initial_codebook.size());
 
-		for (uint32_t thread_iter = 0; thread_iter < max_threads; thread_iter++)
-		{
-#ifndef __EMSCRIPTEN__
-			pJob_pool->add_job( [thread_iter, &local_clusters, &local_parent_clusters, &success_flags, &quantizers, &initial_codebook, &q, &limit_clusterizers, &max_codebook_size, &max_threads, &max_parent_codebook_size] {
-#endif
-
-				Quantizer& lq = quantizers[thread_iter];
-				uint_vec& cluster_indices = initial_codebook[thread_iter];
-
+		// TODO: this really is a parallel reduction, but I just dont know how to deal with dynamic splitting to make that work.
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, initial_codebook.size(), 1),
+		        [&](const tbb::blocked_range<uint32_t>& range) {
+		    for (uint32_t idx = range.begin(); idx < range.end(); ++idx) {
+		        Quantizer lq;
+				const uint_vec& cluster_indices = initial_codebook[idx];
 				uint_vec local_to_global(cluster_indices.size());
 
-				for (uint32_t i = 0; i < cluster_indices.size(); i++)
-				{
+				for (uint32_t i = 0; i < cluster_indices.size(); i++) {
 					const uint32_t global_training_vec_index = cluster_indices[i];
 					local_to_global[i] = global_training_vec_index;
 
-					lq.add_training_vec(q.get_training_vecs()[global_training_vec_index].first, q.get_training_vecs()[global_training_vec_index].second);
-				}
+					lq.add_training_vec(q.get_training_vecs()[global_training_vec_index].first,
+										q.get_training_vecs()[global_training_vec_index].second);
+				} // i
 
-				const uint32_t max_clusters = limit_clusterizers ? ((max_codebook_size + max_threads - 1) / max_threads) : (uint32_t)lq.get_total_training_vecs();
+				const uint32_t max_clusters = limit_clusterizers ?
+						((max_codebook_size + initial_codebook.size() - 1) / initial_codebook.size()) :
+						(uint32_t)lq.get_total_training_vecs();
 
-				success_flags[thread_iter] = lq.generate(max_clusters);
-
-				if (success_flags[thread_iter])
-				{
-					lq.retrieve(local_clusters[thread_iter]);
-
-					for (uint32_t i = 0; i < local_clusters[thread_iter].size(); i++)
-					{
-						for (uint32_t j = 0; j < local_clusters[thread_iter][i].size(); j++)
-							local_clusters[thread_iter][i][j] = local_to_global[local_clusters[thread_iter][i][j]];
-					}
-
-					if (max_parent_codebook_size)
-					{
-						lq.retrieve((max_parent_codebook_size + max_threads - 1) / max_threads, local_parent_clusters[thread_iter]);
-
-						for (uint32_t i = 0; i < local_parent_clusters[thread_iter].size(); i++)
-						{
-							for (uint32_t j = 0; j < local_parent_clusters[thread_iter][i].size(); j++)
-								local_parent_clusters[thread_iter][i][j] = local_to_global[local_parent_clusters[thread_iter][i][j]];
-						}
+				if (!lq.generate(max_clusters)) {
+					if (tbb::task::current_context()->cancel_group_execution()) {
+						success = false;
+						return;
 					}
 				}
 
-#ifndef __EMSCRIPTEN__
-			} );
-#endif
+				lq.retrieve(local_clusters[idx]);
 
-		} // thread_iter
+				for (uint32_t i = 0; i < local_clusters[idx].size(); i++) {
+					for (uint32_t j = 0; j < local_clusters[idx][i].size(); j++) {
+						local_clusters[idx][i][j] = local_to_global[local_clusters[idx][i][j]];
+					} // j
+				} // i
 
-#ifndef __EMSCRIPTEN__
-		pJob_pool->wait_for_all();
-#endif
+				if (max_parent_codebook_size) {
+					lq.retrieve((max_parent_codebook_size + initial_codebook.size() - 1) / initial_codebook.size(),
+								local_parent_clusters[idx]);
+
+					for (uint32_t i = 0; i < local_parent_clusters[idx].size(); i++) {
+						for (uint32_t j = 0; j < local_parent_clusters[idx][i].size(); j++) {
+							local_parent_clusters[idx][i][j] = local_to_global[local_parent_clusters[idx][i][j]];
+						} // j
+					} // i
+				}
+		    } // idx
+		});
+
+		if (!success) {
+			return false;
+		}
 
 		uint32_t total_clusters = 0, total_parent_clusters = 0;
 
-		for (int thread_iter = 0; thread_iter < (int)max_threads; thread_iter++)
-		{
-			if (!success_flags[thread_iter])
-				return false;
-			total_clusters += (uint32_t)local_clusters[thread_iter].size();
-			total_parent_clusters += (uint32_t)local_parent_clusters[thread_iter].size();
-		}
+		for (uint32_t idx; idx < initial_codebook.size(); ++idx) {
+			total_clusters += (uint32_t)local_clusters[idx].size();
+			total_parent_clusters += (uint32_t)local_parent_clusters[idx].size();
+		} // idx
 
 		codebook.reserve(total_clusters);
 		parent_codebook.reserve(total_parent_clusters);
 
-		for (uint32_t thread_iter = 0; thread_iter < max_threads; thread_iter++)
-		{
-			for (uint32_t j = 0; j < local_clusters[thread_iter].size(); j++)
-			{
+		for (uint32_t idx = 0; idx < initial_codebook.size(); ++idx) {
+			for (uint32_t j = 0; j < local_clusters[idx].size(); j++) {
 				codebook.resize(codebook.size() + 1);
-				codebook.back().swap(local_clusters[thread_iter][j]);
-			}
+				codebook.back().swap(local_clusters[idx][j]);
+			} // j
 
-			for (uint32_t j = 0; j < local_parent_clusters[thread_iter].size(); j++)
-			{
+			for (uint32_t j = 0; j < local_parent_clusters[idx].size(); j++) {
 				parent_codebook.resize(parent_codebook.size() + 1);
-				parent_codebook.back().swap(local_parent_clusters[thread_iter][j]);
-			}
-		}
+				parent_codebook.back().swap(local_parent_clusters[idx][j]);
+			} // j
+		} // idx
 
 		return true;
 	}
@@ -2066,7 +2046,6 @@ namespace basisu
 		uint32_t max_codebook_size, uint32_t max_parent_codebook_size,
 		basisu::vector<uint_vec>& codebook,
 		basisu::vector<uint_vec>& parent_codebook,
-		uint32_t max_threads, job_pool *pJob_pool,
 		bool even_odd_input_pairs_equal)
 	{
 		typedef bit_hasher<typename Quantizer::training_vec_type> training_vec_bit_hasher;
@@ -2151,7 +2130,7 @@ namespace basisu
 			max_codebook_size, max_parent_codebook_size,
 			group_codebook,
 			group_parent_codebook,
-			(unique_vecs.size() < 65536*4) ? 1 : max_threads, limit_clusterizers, pJob_pool);
+			limit_clusterizers);
 
 		if (!status)
 			return false;
