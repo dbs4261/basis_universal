@@ -228,8 +228,7 @@ namespace basisu
 			m_resample_height(0, 1, 16384),
 			m_resample_factor(0.0f, .00125f, 100.0f),
 			m_ktx2_uastc_supercompression(basist::KTX2_SS_NONE),
-			m_ktx2_zstd_supercompression_level(6, INT_MIN, INT_MAX),
-			m_pJob_pool(nullptr)
+			m_ktx2_zstd_supercompression_level(6, INT_MIN, INT_MAX)
 		{
 			clear();
 		}
@@ -262,7 +261,6 @@ namespace basisu
 			m_print_stats.clear();
 			m_check_for_alpha.clear();
 			m_force_alpha.clear();
-			m_multithreading.clear();
 			m_swizzle[0] = 0;
 			m_swizzle[1] = 1;
 			m_swizzle[2] = 2;
@@ -316,8 +314,6 @@ namespace basisu
 			m_ktx2_srgb_transfer_func.clear();
 
 			m_validate_output_data.clear();
-
-			m_pJob_pool = nullptr;
 		}
 						
 		// True to generate UASTC .basis file data, otherwise ETC1S.
@@ -386,8 +382,7 @@ namespace basisu
 		bool_param<true> m_check_for_alpha;
 		
 		// Always put alpha slices in the output basis file, even when the input doesn't have alpha
-		bool_param<false> m_force_alpha; 
-		bool_param<true> m_multithreading;
+		bool_param<false> m_force_alpha;
 		
 		// Split the R channel to RGB and the G channel to alpha, then write a basis file with alpha channels
 		char m_swizzle[4];
@@ -449,8 +444,6 @@ namespace basisu
 		bool_param<false> m_ktx2_srgb_transfer_func;
 
 		bool_param<false> m_validate_output_data;
-
-		job_pool *m_pJob_pool;
 	};
 
 	// Important: basisu_encoder_init() MUST be called first before using this class.
@@ -566,7 +559,7 @@ namespace basisu
 	//   pImageRGBA: pointer to a 32-bpp RGBx or RGBA raster image, R first in memory, A last. Top scanline first in memory.
 	//   width/height/pitch_in_pixels: dimensions of pImageRGBA
 	//   
-	// flags_and_quality: Combination of the above flags logically OR'd with the ETC1S or UASTC level, i.e. "cFlagSRGB | cFlagGenMipsClamp | cFlagThreaded | 128" or "cFlagSRGB | cFlagGenMipsClamp | cFlagUASTC | cFlagThreaded | cPackUASTCLevelDefault".
+	// flags_and_quality: Combination of the above flags logically OR'd with the ETC1S or UASTC level, i.e. "cFlagSRGB | cFlagGenMipsClamp |  128" or "cFlagSRGB | cFlagGenMipsClamp | cFlagUASTC | cFlagThreaded | cPackUASTCLevelDefault".
 	//	  In ETC1S mode, the lower 8-bits are the ETC1S quality level which ranges from [1,255] (higher=better quality/larger files)
 	//	  In UASTC mode, the lower 8-bits are the UASTC pack level (see cPackUASTCLevelFastest, etc.). Fastest/lowest quality is 0, so be sure to set it correctly. 
 	// 
@@ -578,7 +571,6 @@ namespace basisu
 	enum
 	{
 		cFlagUseOpenCL = 1 << 8,		// use OpenCL if available
-		cFlagThreaded = 1 << 9,			// use multiple threads for compression
 		cFlagDebug = 1 << 10,			// enable debug output
 
 		cFlagKTX2 = 1 << 11,			// generate a KTX2 file
@@ -655,7 +647,6 @@ namespace basisu
 	// Compressing multiple textures at a time is substantially more efficient than just compressing one at a time.
 	// total_threads must be >= 1.
 	bool basis_parallel_compress(
-		uint32_t total_threads,
 		const basisu::vector<basis_compressor_params> &params_vec,
 		basisu::vector< parallel_results > &results_vec);
 		

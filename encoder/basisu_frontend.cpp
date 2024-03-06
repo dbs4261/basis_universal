@@ -53,8 +53,7 @@ namespace basisu
 			
 	bool basisu_frontend::init(const params &p)
 	{
-		debug_printf("basisu_frontend::init: Multithreaded: %u, Job pool total threads: %u, NumEndpointClusters: %u, NumSelectorClusters: %u, Perceptual: %u, CompressionLevel: %u\n",
-			p.m_multithreaded, p.m_pJob_pool ? p.m_pJob_pool->get_total_threads() : 0,
+		debug_printf("basisu_frontend::init: NumEndpointClusters: %u, NumSelectorClusters: %u, Perceptual: %u, CompressionLevel: %u\n",
 			p.m_max_endpoint_clusters, p.m_max_selector_clusters, p.m_perceptual, p.m_compression_level);
 				
 		if ((p.m_max_endpoint_clusters < 1) || (p.m_max_endpoint_clusters > cMaxEndpointClusters))

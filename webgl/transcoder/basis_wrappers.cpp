@@ -1057,16 +1057,8 @@ public:
 			return 0;
 		}
 
-		// We don't use threading for now, but the compressor needs a job pool.
-		job_pool jpool(1);
-
 		// Initialize the compression parameters structure. This is the same structure that the command line tool fills in.
 		basis_compressor_params &params = m_params;
-
-		params.m_pJob_pool = &jpool;
-
-		// Disabling multithreading for now, which sucks.
-		params.m_multithreading = false;
 		
 		params.m_status_output = params.m_debug;
 

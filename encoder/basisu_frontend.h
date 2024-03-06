@@ -78,11 +78,9 @@ namespace basisu
 				m_debug_images(false),
 				m_dump_endpoint_clusterization(true),
 				m_validate(false),
-				m_multithreaded(false),
 				m_disable_hierarchical_endpoint_codebooks(false),
 				m_tex_type(basist::cBASISTexType2D),
-				m_pOpenCL_context(nullptr),
-				m_pJob_pool(nullptr)
+				m_pOpenCL_context(nullptr)
 			{
 			}
 
@@ -99,15 +97,12 @@ namespace basisu
 			bool m_debug_images;
 			bool m_dump_endpoint_clusterization;
 			bool m_validate;
-			bool m_multithreaded;
 			bool m_disable_hierarchical_endpoint_codebooks;
 			
 			basist::basis_texture_type m_tex_type;
 			const basist::basisu_lowlevel_etc1s_transcoder *m_pGlobal_codebooks;
 						
 			opencl_context_ptr m_pOpenCL_context;
-			
-			job_pool *m_pJob_pool;
 		};
 
 		bool init(const params &p);

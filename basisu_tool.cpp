@@ -28,6 +28,8 @@
 #include "encoder/basisu_ssim.h"
 #include "encoder/basisu_opencl.h"
 
+#include <tbb/global_control.h>
+
 #define MINIZ_HEADER_FILE_ONLY
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include "encoder/basisu_miniz.h"
@@ -84,7 +86,7 @@ static void print_usage()
 		"Options:\n"
 		" -opencl: Enable OpenCL usage\n"
 		" -opencl_serialize: Serialize all calls to the OpenCL driver (to work around buggy drivers, only useful with -parallel)\n"
-		" -parallel: Compress multiple textures simumtanously (one per thread), instead of one at a time. Compatible with OpenCL mode. This is much faster, but in OpenCL mode the driver is pushed harder, and the CLI output will be jumbled.\n"
+		" -parallel: Compress multiple textures simumtanously, instead of one at a time. Compatible with OpenCL mode. This is much faster, but in OpenCL mode the driver is pushed harder, and the CLI output will be jumbled.\n"
 		" -ktx2: Write .KTX2 ETC1S/UASTC files instead of .basis files. By default, UASTC files will be compressed using Zstandard unless -ktx2_no_zstandard is specified.\n"
 		" -ktx2_no_zstandard: Don't compress UASTC texture data using Zstandard, store it uncompressed instead.\n"
 		" -ktx2_zstandard_level X: Set ZStandard compression level to X (see Zstandard documentation, default level is 6)\n"
@@ -137,7 +139,7 @@ static void print_usage()
 		" -swizzle rgba: Specify swizzle for the 4 input color channels using r, g, b and a (the -separate_rg_to_color_alpha flag is equivalent to rrrg)\n"
 		" -renorm: Renormalize each input image before any further processing/compression\n"
 		" -no_multithreading: Disable multithreading\n"
-		" -max_threads X: Use at most X threads total when multithreading is enabled (this includes the main thread)\n"
+		" -max_threads X: Use at most X threads total (this includes the main thread)\n"
 		" -no_ktx: Disable KTX writing when unpacking (faster, less output files)\n"
 		" -ktx_only: Only write KTX files when unpacking (faster, less output files)\n"
 		" -write_out: Write 3dfx OUT files when unpacking FXT1 textures\n"
@@ -480,8 +482,7 @@ public:
 			}
 			else if (strcasecmp(pArg, "-uastc_rdo_f") == 0)
 				m_comp_params.m_rdo_uastc_favor_simpler_modes_in_rdo_mode = false;
-			else if (strcasecmp(pArg, "-uastc_rdo_m") == 0)
-				m_comp_params.m_rdo_uastc_multithreading = false;
+			else if (strcasecmp(pArg, "-uastc_rdo_m") == 0) {}
 			else if (strcasecmp(pArg, "-linear") == 0)
 				m_comp_params.m_perceptual = false;
 			else if (strcasecmp(pArg, "-srgb") == 0)
@@ -606,7 +607,7 @@ public:
 				m_comp_params.m_renormalize = true;
 			else if (strcasecmp(pArg, "-no_multithreading") == 0)
 			{
-				m_comp_params.m_multithreading = false;
+				m_max_threads = 1;
 			}
 			else if (strcasecmp(pArg, "-parallel") == 0)
 			{
@@ -969,22 +970,8 @@ static basis_data *load_basis_file(const char *pInput_filename, bool force_etc1s
 
 static bool compress_mode(command_line_params &opts)
 {
-	uint32_t num_threads = 1;
+	tbb::global_control gc(tbb::global_control::max_allowed_parallelism, opts.m_max_threads);
 
-	if (opts.m_comp_params.m_multithreading)
-	{
-		// We use std::thread::hardware_concurrency() as a hint to determine the default # of threads to put into a pool.
-		num_threads = std::thread::hardware_concurrency();
-		if (num_threads < 1)
-			num_threads = 1;
-		if (num_threads > opts.m_max_threads)
-			num_threads = opts.m_max_threads;
-	}
-
-	job_pool compressor_jpool(opts.m_parallel_compression ? 1 : num_threads);
-	if (!opts.m_parallel_compression)
-		opts.m_comp_params.m_pJob_pool = &compressor_jpool;
-		
 	if (!expand_multifile(opts))
 	{
 		error_printf("-multifile expansion failed!\n");
@@ -1323,7 +1310,6 @@ static bool compress_mode(command_line_params &opts)
 		basisu::vector<parallel_results> results;
 
 		bool any_failed = basis_parallel_compress(
-			num_threads,
 			comp_params_vec,
 			results);
 		BASISU_NOTE_UNUSED(any_failed);
@@ -3041,7 +3027,7 @@ static bool bench_mode(command_line_params& opts)
 #endif
 
 	const uint32_t JOB_POOL_SIZE = 7;
-	job_pool jpool(JOB_POOL_SIZE);
+	tbb::global_control gc(tbb::global_control::max_allowed_parallelism, JOB_POOL_SIZE);
 
 	float total_uastc_psnr = 0, total_uastc_a_psnr = 0, total_uastc_rgba_psnr = 0;
 	float total_rdo_uastc_psnr = 0, total_rdo_uastc_a_psnr = 0, total_rdo_uastc_rgba_psnr = 0;
@@ -3290,273 +3276,259 @@ static bool bench_mode(command_line_params& opts)
 		}
 #endif
 
-		const uint32_t N = 128;
-		for (uint32_t block_index_iter = 0; block_index_iter < total_blocks; block_index_iter += N)
-		{
-			const uint32_t first_index = block_index_iter;
-			const uint32_t last_index = minimum<uint32_t>(total_blocks, block_index_iter + N);
-
-			jpool.add_job([first_index, last_index, &img, num_blocks_x, num_blocks_y,
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, total_blocks, 128),
+				[&img, num_blocks_x, num_blocks_y,
 				&opt_bc1_img, &opt_bc1_2_img, &mode_hist, &overall_mode_hist, &uastc_img, &uastc2_img, &bc7_img, &part_img, &mode_hist_mutex, &bc1_img, &etc1_img, &etc1_g_img, &etc2_img, &etc1_hint_hist, &perceptual,
 				&total_bc1_hint0s, &total_bc1_hint1s, &total_bc1_hint01s, &bc3_img, &total_enc_time, &eac_r11_img, &eac_rg11_img, &ublocks, &flags, &etc1_inten_hist, &etc1_flip_hist, &etc1_diff_hist, &total_bench_time, &total_bench2_time,
-				//&bc7enc_p, &bc7enc_img] {
-				&bc7enc_img] {
+				&bc7enc_img] (const tbb::blocked_range<uint32_t>& range) {
+			BASISU_NOTE_UNUSED(num_blocks_y);
+			BASISU_NOTE_UNUSED(perceptual);
+			BASISU_NOTE_UNUSED(flags);
+		    for (uint32_t block_index = range.begin(); block_index < range.end(); ++block_index) {
+				const uint32_t block_x = block_index % num_blocks_x;
+				const uint32_t block_y = block_index / num_blocks_x;
 
-					BASISU_NOTE_UNUSED(num_blocks_y);
-					BASISU_NOTE_UNUSED(perceptual);
-					BASISU_NOTE_UNUSED(flags);
+				//uint32_t block_x = 170;
+				//uint32_t block_y = 167;
 
-					for (uint32_t block_index = first_index; block_index < last_index; block_index++)
-					{
-						const uint32_t block_x = block_index % num_blocks_x;
-						const uint32_t block_y = block_index / num_blocks_x;
+				// HACK HACK
+				//if ((block_x == 77) && (block_y == 54))
+				//	printf("!");
 
-						//uint32_t block_x = 170;
-						//uint32_t block_y = 167;
+				color_rgba block[4][4];
+				img.extract_block_clamped(&block[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						// HACK HACK
-						//if ((block_x == 77) && (block_y == 54))
-						//	printf("!");
+				uint8_t bc7_block[16];
+				//bc7enc_compress_block(bc7_block, block, &bc7enc_p);
+				color_rgba decoded_bc7enc_blk[4][4];
+				unpack_block(texture_format::cBC7, &bc7_block, &decoded_bc7enc_blk[0][0]);
+				bc7enc_img.set_block_clipped(&decoded_bc7enc_blk[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						color_rgba block[4][4];
-						img.extract_block_clamped(&block[0][0], block_x * 4, block_y * 4, 4, 4);
+				// Pack near-optimal BC1
+				// stb_dxt BC1 encoder
+				uint8_t bc1_block[8];
 
-						uint8_t bc7_block[16];
-						//bc7enc_compress_block(bc7_block, block, &bc7enc_p);
-						color_rgba decoded_bc7enc_blk[4][4];
-						unpack_block(texture_format::cBC7, &bc7_block, &decoded_bc7enc_blk[0][0]);
-						bc7enc_img.set_block_clipped(&decoded_bc7enc_blk[0][0], block_x * 4, block_y * 4, 4, 4);
+				interval_timer btm;
+				btm.start();
 
-						// Pack near-optimal BC1
-						// stb_dxt BC1 encoder
-						uint8_t bc1_block[8];
+				//stb_compress_dxt_block(bc1_block, (uint8_t*)&block[0][0], 0, STB_DXT_HIGHQUAL);
+				basist::encode_bc1(bc1_block, (uint8_t*)&block[0][0], 0);// basist::cEncodeBC1HighQuality);
+				double total_b_time = btm.get_elapsed_secs();
+				{
+					std::lock_guard<std::mutex> lck(mode_hist_mutex);
+					total_bench_time += total_b_time;
+				}
 
-						interval_timer btm;
-						btm.start();
+				color_rgba block_bc1[4][4];
+				unpack_block(texture_format::cBC1, bc1_block, &block_bc1[0][0]);
+				opt_bc1_img.set_block_clipped(&block_bc1[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						//stb_compress_dxt_block(bc1_block, (uint8_t*)&block[0][0], 0, STB_DXT_HIGHQUAL);
-						basist::encode_bc1(bc1_block, (uint8_t*)&block[0][0], 0);// basist::cEncodeBC1HighQuality);
-						double total_b_time = btm.get_elapsed_secs();
-						{
-							std::lock_guard<std::mutex> lck(mode_hist_mutex);
-							total_bench_time += total_b_time;
-						}
+				//uint64_t e1 = 0;
+				//for (uint32_t i = 0; i < 16; i++)
+				//	e1 += color_distance(((color_rgba*)block_bc1)[i], ((color_rgba*)block)[i], false);
 
-						color_rgba block_bc1[4][4];
-						unpack_block(texture_format::cBC1, bc1_block, &block_bc1[0][0]);
-						opt_bc1_img.set_block_clipped(&block_bc1[0][0], block_x * 4, block_y * 4, 4, 4);
+				// My BC1 encoder
+				uint8_t bc1_block_2[8];
+				color_rgba block_bc1_2[4][4];
 
-						//uint64_t e1 = 0;
-						//for (uint32_t i = 0; i < 16; i++)
-						//	e1 += color_distance(((color_rgba*)block_bc1)[i], ((color_rgba*)block)[i], false);
+				btm.start();
+				basist::encode_bc1_alt(bc1_block_2, (uint8_t*)&block[0][0], basist::cEncodeBC1HighQuality);
+				double total_b2_time = btm.get_elapsed_secs();
+				{
+					std::lock_guard<std::mutex> lck(mode_hist_mutex);
+					total_bench2_time += total_b2_time;
+				}
 
-						// My BC1 encoder
-						uint8_t bc1_block_2[8];
-						color_rgba block_bc1_2[4][4];
+				unpack_block(texture_format::cBC1, bc1_block_2, &block_bc1_2[0][0]);
+				//uint64_t e2 = 0;
+				//for (uint32_t i = 0; i < 16; i++)
+				//	e2 += color_distance(((color_rgba *)block_bc1_2)[i], ((color_rgba*)block)[i], false);
 
-						btm.start();
-						basist::encode_bc1_alt(bc1_block_2, (uint8_t*)&block[0][0], basist::cEncodeBC1HighQuality);
-						double total_b2_time = btm.get_elapsed_secs();
-						{
-							std::lock_guard<std::mutex> lck(mode_hist_mutex);
-							total_bench2_time += total_b2_time;
-						}
+				opt_bc1_2_img.set_block_clipped(&block_bc1_2[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						unpack_block(texture_format::cBC1, bc1_block_2, &block_bc1_2[0][0]);
-						//uint64_t e2 = 0;
-						//for (uint32_t i = 0; i < 16; i++)
-						//	e2 += color_distance(((color_rgba *)block_bc1_2)[i], ((color_rgba*)block)[i], false);
+				// Encode to UASTC
+				basist::uastc_block encoded_uastc_blk;
 
-						opt_bc1_2_img.set_block_clipped(&block_bc1_2[0][0], block_x * 4, block_y * 4, 4, 4);
+				interval_timer tm;
+				tm.start();
+				encode_uastc(&block[0][0].r, encoded_uastc_blk, flags);
+				double total_time = tm.get_elapsed_secs();
+				{
+					std::lock_guard<std::mutex> lck(mode_hist_mutex);
+					total_enc_time += total_time;
+				}
 
-						// Encode to UASTC
-						basist::uastc_block encoded_uastc_blk;
-
-						interval_timer tm;
-						tm.start();
-						encode_uastc(&block[0][0].r, encoded_uastc_blk, flags);
-						double total_time = tm.get_elapsed_secs();
-						{
-							std::lock_guard<std::mutex> lck(mode_hist_mutex);
-							total_enc_time += total_time;
-						}
-
-						ublocks[block_x + block_y * num_blocks_x] = encoded_uastc_blk;
+				ublocks[block_x + block_y * num_blocks_x] = encoded_uastc_blk;
 
 #if 0
-						for (uint32_t i = 0; i < 16; i++)
-							printf("0x%X,", encoded_uastc_blk.m_bytes[i]);
-						printf("\n");
+				for (uint32_t i = 0; i < 16; i++)
+					printf("0x%X,", encoded_uastc_blk.m_bytes[i]);
+				printf("\n");
 #endif
 
-						// Unpack UASTC
-						basist::unpacked_uastc_block unpacked_uastc_blk;
-						unpack_uastc(encoded_uastc_blk, unpacked_uastc_blk, false);
+				// Unpack UASTC
+				basist::unpacked_uastc_block unpacked_uastc_blk;
+				unpack_uastc(encoded_uastc_blk, unpacked_uastc_blk, false);
 
-						color_rgba unpacked_uastc_block_pixels[4][4];
-						bool success = basist::unpack_uastc(unpacked_uastc_blk, (basist::color32*) & unpacked_uastc_block_pixels[0][0], false);
-						(void)success;
-						assert(success);
+				color_rgba unpacked_uastc_block_pixels[4][4];
+				bool success = basist::unpack_uastc(unpacked_uastc_blk, (basist::color32*) & unpacked_uastc_block_pixels[0][0], false);
+				(void)success;
+				assert(success);
 
-						uastc_img.set_block_clipped(&unpacked_uastc_block_pixels[0][0], block_x * 4, block_y * 4, 4, 4);
+				uastc_img.set_block_clipped(&unpacked_uastc_block_pixels[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						const uint32_t best_mode = unpacked_uastc_blk.m_mode;
+				const uint32_t best_mode = unpacked_uastc_blk.m_mode;
 
+				{
+					std::lock_guard<std::mutex> lck(mode_hist_mutex);
+					assert(best_mode < basist::TOTAL_UASTC_MODES);
+					if (best_mode < basist::TOTAL_UASTC_MODES)
+					{
+						mode_hist[best_mode]++;
+						overall_mode_hist[best_mode]++;
+					}
+
+					if (basist::g_uastc_mode_has_etc1_bias[best_mode])
+						etc1_hint_hist[unpacked_uastc_blk.m_etc1_bias]++;
+
+					total_bc1_hint0s += unpacked_uastc_blk.m_bc1_hint0;
+					total_bc1_hint1s += unpacked_uastc_blk.m_bc1_hint1;
+					total_bc1_hint01s += (unpacked_uastc_blk.m_bc1_hint0 || unpacked_uastc_blk.m_bc1_hint1);
+
+					etc1_inten_hist[unpacked_uastc_blk.m_etc1_inten0]++;
+					etc1_inten_hist[unpacked_uastc_blk.m_etc1_inten1]++;
+
+					etc1_flip_hist[unpacked_uastc_blk.m_etc1_flip]++;
+					etc1_diff_hist[unpacked_uastc_blk.m_etc1_diff]++;
+				}
+
+				// Transcode to BC1
+				color_rgba tblock_bc1[4][4];
+
+				uint8_t tbc1_block[8];
+				transcode_uastc_to_bc1(encoded_uastc_blk, tbc1_block, false);
+				unpack_block(texture_format::cBC1, tbc1_block, &tblock_bc1[0][0]);
+				bc1_img.set_block_clipped(&tblock_bc1[0][0], block_x * 4, block_y * 4, 4, 4);
+
+				// Transcode to BC7
+				basist::bc7_optimization_results best_bc7_results;
+				transcode_uastc_to_bc7(unpacked_uastc_blk, best_bc7_results);
+
+				{
+					basist::bc7_block bc7_data;
+					encode_bc7_block(&bc7_data, &best_bc7_results);
+
+					color_rgba decoded_bc7_blk[4][4];
+					unpack_block(texture_format::cBC7, &bc7_data, &decoded_bc7_blk[0][0]);
+
+					bc7_img.set_block_clipped(&decoded_bc7_blk[0][0], block_x * 4, block_y * 4, 4, 4);
+
+					// Compute partition visualization image
+					for (uint32_t y = 0; y < 4; y++)
+					{
+						for (uint32_t x = 0; x < 4; x++)
 						{
-							std::lock_guard<std::mutex> lck(mode_hist_mutex);
-							assert(best_mode < basist::TOTAL_UASTC_MODES);
-							if (best_mode < basist::TOTAL_UASTC_MODES)
+							uint32_t part = 0;
+							switch (best_bc7_results.m_mode)
 							{
-								mode_hist[best_mode]++;
-								overall_mode_hist[best_mode]++;
+							case 1:
+							case 3:
+							case 7:
+								part = basist::g_bc7_partition2[best_bc7_results.m_partition * 16 + x + y * 4];
+								break;
+							case 0:
+							case 2:
+								part = basist::g_bc7_partition3[best_bc7_results.m_partition * 16 + x + y * 4];
+								break;
 							}
 
-							if (basist::g_uastc_mode_has_etc1_bias[best_mode])
-								etc1_hint_hist[unpacked_uastc_blk.m_etc1_bias]++;
+							color_rgba c(0, 255, 0, 255);
+							if (part == 1)
+								c.set(255, 0, 0, 255);
+							else if (part == 2)
+								c.set(0, 0, 255, 255);
 
-							total_bc1_hint0s += unpacked_uastc_blk.m_bc1_hint0;
-							total_bc1_hint1s += unpacked_uastc_blk.m_bc1_hint1;
-							total_bc1_hint01s += (unpacked_uastc_blk.m_bc1_hint0 || unpacked_uastc_blk.m_bc1_hint1);
-
-							etc1_inten_hist[unpacked_uastc_blk.m_etc1_inten0]++;
-							etc1_inten_hist[unpacked_uastc_blk.m_etc1_inten1]++;
-
-							etc1_flip_hist[unpacked_uastc_blk.m_etc1_flip]++;
-							etc1_diff_hist[unpacked_uastc_blk.m_etc1_diff]++;
+							part_img.set_clipped(block_x * 4 + x, block_y * 4 + y, c);
 						}
+					}
+				}
 
-						// Transcode to BC1
-						color_rgba tblock_bc1[4][4];
+				bool high_quality = false;
 
-						uint8_t tbc1_block[8];
-						transcode_uastc_to_bc1(encoded_uastc_blk, tbc1_block, false);
-						unpack_block(texture_format::cBC1, tbc1_block, &tblock_bc1[0][0]);
-						bc1_img.set_block_clipped(&tblock_bc1[0][0], block_x * 4, block_y * 4, 4, 4);
+				// Transcode UASTC->BC3
+				uint8_t ublock_bc3[16];
+				transcode_uastc_to_bc3(encoded_uastc_blk, ublock_bc3, high_quality);
+				color_rgba ublock_bc3_unpacked[4][4];
+				unpack_block(texture_format::cBC3, &ublock_bc3, &ublock_bc3_unpacked[0][0]);
+				bc3_img.set_block_clipped(&ublock_bc3_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
 
-						// Transcode to BC7
-						basist::bc7_optimization_results best_bc7_results;
-						transcode_uastc_to_bc7(unpacked_uastc_blk, best_bc7_results);
+				// Transcode UASTC->R11
+				uint8_t ublock_eac_r11[8];
+				transcode_uastc_to_etc2_eac_r11(encoded_uastc_blk, ublock_eac_r11, high_quality, 0);
+				color_rgba ublock_eac_r11_unpacked[4][4];
+				for (uint32_t y = 0; y < 4; y++)
+					for (uint32_t x = 0; x < 4; x++)
+						ublock_eac_r11_unpacked[y][x].set(0, 0, 0, 255);
+				unpack_block(texture_format::cETC2_R11_EAC, &ublock_eac_r11, &ublock_eac_r11_unpacked[0][0]);
+				eac_r11_img.set_block_clipped(&ublock_eac_r11_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
 
+				// Transcode UASTC->RG11
+				uint8_t ublock_eac_rg11[16];
+				transcode_uastc_to_etc2_eac_rg11(encoded_uastc_blk, ublock_eac_rg11, high_quality, 0, 1);
+				color_rgba ublock_eac_rg11_unpacked[4][4];
+				for (uint32_t y = 0; y < 4; y++)
+					for (uint32_t x = 0; x < 4; x++)
+						ublock_eac_rg11_unpacked[y][x].set(0, 0, 0, 255);
+				unpack_block(texture_format::cETC2_RG11_EAC, &ublock_eac_rg11, &ublock_eac_rg11_unpacked[0][0]);
+				eac_rg11_img.set_block_clipped(&ublock_eac_rg11_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
+
+				// ETC1
+				etc_block unpacked_etc1;
+				transcode_uastc_to_etc1(encoded_uastc_blk, &unpacked_etc1);
+				color_rgba unpacked_etc1_block[16];
+				unpack_etc1(unpacked_etc1, unpacked_etc1_block);
+				etc1_img.set_block_clipped(unpacked_etc1_block, block_x * 4, block_y * 4, 4, 4);
+
+				// ETC1 Y
+				etc_block unpacked_etc1_g;
+
+				transcode_uastc_to_etc1(encoded_uastc_blk, &unpacked_etc1_g, 1);
+
+				color_rgba unpacked_etc1_g_block[16];
+				unpack_etc1(unpacked_etc1_g, unpacked_etc1_g_block);
+				etc1_g_img.set_block_clipped(unpacked_etc1_g_block, block_x * 4, block_y * 4, 4, 4);
+
+				// ETC2
+				etc2_rgba_block unpacked_etc2;
+				transcode_uastc_to_etc2_rgba(encoded_uastc_blk, &unpacked_etc2);
+
+				color_rgba unpacked_etc2_block[16];
+				unpack_block(texture_format::cETC2_RGBA, &unpacked_etc2, unpacked_etc2_block);
+				etc2_img.set_block_clipped(unpacked_etc2_block, block_x * 4, block_y * 4, 4, 4);
+
+				// UASTC->ASTC
+				uint32_t tastc_data[4];
+
+				transcode_uastc_to_astc(encoded_uastc_blk, tastc_data);
+
+				color_rgba decoded_tastc_block[4][4];
+				//basisu_astc::astc::decompress((uint8_t*)decoded_tastc_block, (uint8_t*)&tastc_data, false, 4, 4);
+
+				uastc2_img.set_block_clipped(&decoded_tastc_block[0][0], block_x * 4, block_y * 4, 4, 4);
+
+				for (uint32_t y = 0; y < 4; y++)
+				{
+					for (uint32_t x = 0; x < 4; x++)
+					{
+						if (decoded_tastc_block[y][x] != unpacked_uastc_block_pixels[y][x])
 						{
-							basist::bc7_block bc7_data;
-							encode_bc7_block(&bc7_data, &best_bc7_results);
-
-							color_rgba decoded_bc7_blk[4][4];
-							unpack_block(texture_format::cBC7, &bc7_data, &decoded_bc7_blk[0][0]);
-
-							bc7_img.set_block_clipped(&decoded_bc7_blk[0][0], block_x * 4, block_y * 4, 4, 4);
-
-							// Compute partition visualization image
-							for (uint32_t y = 0; y < 4; y++)
-							{
-								for (uint32_t x = 0; x < 4; x++)
-								{
-									uint32_t part = 0;
-									switch (best_bc7_results.m_mode)
-									{
-									case 1:
-									case 3:
-									case 7:
-										part = basist::g_bc7_partition2[best_bc7_results.m_partition * 16 + x + y * 4];
-										break;
-									case 0:
-									case 2:
-										part = basist::g_bc7_partition3[best_bc7_results.m_partition * 16 + x + y * 4];
-										break;
-									}
-
-									color_rgba c(0, 255, 0, 255);
-									if (part == 1)
-										c.set(255, 0, 0, 255);
-									else if (part == 2)
-										c.set(0, 0, 255, 255);
-
-									part_img.set_clipped(block_x * 4 + x, block_y * 4 + y, c);
-								}
-							}
+							printf("UASTC!=ASTC!\n");
 						}
+					}
+				}
 
-						bool high_quality = false;
-
-						// Transcode UASTC->BC3
-						uint8_t ublock_bc3[16];
-						transcode_uastc_to_bc3(encoded_uastc_blk, ublock_bc3, high_quality);
-						color_rgba ublock_bc3_unpacked[4][4];
-						unpack_block(texture_format::cBC3, &ublock_bc3, &ublock_bc3_unpacked[0][0]);
-						bc3_img.set_block_clipped(&ublock_bc3_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
-
-						// Transcode UASTC->R11
-						uint8_t ublock_eac_r11[8];
-						transcode_uastc_to_etc2_eac_r11(encoded_uastc_blk, ublock_eac_r11, high_quality, 0);
-						color_rgba ublock_eac_r11_unpacked[4][4];
-						for (uint32_t y = 0; y < 4; y++)
-							for (uint32_t x = 0; x < 4; x++)
-								ublock_eac_r11_unpacked[y][x].set(0, 0, 0, 255);
-						unpack_block(texture_format::cETC2_R11_EAC, &ublock_eac_r11, &ublock_eac_r11_unpacked[0][0]);
-						eac_r11_img.set_block_clipped(&ublock_eac_r11_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
-
-						// Transcode UASTC->RG11
-						uint8_t ublock_eac_rg11[16];
-						transcode_uastc_to_etc2_eac_rg11(encoded_uastc_blk, ublock_eac_rg11, high_quality, 0, 1);
-						color_rgba ublock_eac_rg11_unpacked[4][4];
-						for (uint32_t y = 0; y < 4; y++)
-							for (uint32_t x = 0; x < 4; x++)
-								ublock_eac_rg11_unpacked[y][x].set(0, 0, 0, 255);
-						unpack_block(texture_format::cETC2_RG11_EAC, &ublock_eac_rg11, &ublock_eac_rg11_unpacked[0][0]);
-						eac_rg11_img.set_block_clipped(&ublock_eac_rg11_unpacked[0][0], block_x * 4, block_y * 4, 4, 4);
-
-						// ETC1
-						etc_block unpacked_etc1;
-						transcode_uastc_to_etc1(encoded_uastc_blk, &unpacked_etc1);
-						color_rgba unpacked_etc1_block[16];
-						unpack_etc1(unpacked_etc1, unpacked_etc1_block);
-						etc1_img.set_block_clipped(unpacked_etc1_block, block_x * 4, block_y * 4, 4, 4);
-
-						// ETC1 Y
-						etc_block unpacked_etc1_g;
-
-						transcode_uastc_to_etc1(encoded_uastc_blk, &unpacked_etc1_g, 1);
-
-						color_rgba unpacked_etc1_g_block[16];
-						unpack_etc1(unpacked_etc1_g, unpacked_etc1_g_block);
-						etc1_g_img.set_block_clipped(unpacked_etc1_g_block, block_x * 4, block_y * 4, 4, 4);
-
-						// ETC2
-						etc2_rgba_block unpacked_etc2;
-						transcode_uastc_to_etc2_rgba(encoded_uastc_blk, &unpacked_etc2);
-
-						color_rgba unpacked_etc2_block[16];
-						unpack_block(texture_format::cETC2_RGBA, &unpacked_etc2, unpacked_etc2_block);
-						etc2_img.set_block_clipped(unpacked_etc2_block, block_x * 4, block_y * 4, 4, 4);
-
-						// UASTC->ASTC
-						uint32_t tastc_data[4];
-
-						transcode_uastc_to_astc(encoded_uastc_blk, tastc_data);
-
-						color_rgba decoded_tastc_block[4][4];
-						//basisu_astc::astc::decompress((uint8_t*)decoded_tastc_block, (uint8_t*)&tastc_data, false, 4, 4);
-
-						uastc2_img.set_block_clipped(&decoded_tastc_block[0][0], block_x * 4, block_y * 4, 4, 4);
-
-						for (uint32_t y = 0; y < 4; y++)
-						{
-							for (uint32_t x = 0; x < 4; x++)
-							{
-								if (decoded_tastc_block[y][x] != unpacked_uastc_block_pixels[y][x])
-								{
-									printf("UASTC!=ASTC!\n");
-								}
-							}
-						}
-
-					} // block_index
-
-				});
-
-		} // block_index_iter
-
-		jpool.wait_for_all();
+			} // block_index
+		});
 
 		{
 			size_t comp_size = 0;
@@ -3587,9 +3559,6 @@ static bool bench_mode(command_line_params& opts)
 		for (uint32_t block_y = 0; block_y < num_blocks_y; block_y++)
 			for (uint32_t block_x = 0; block_x < num_blocks_x; block_x++)
 				img.extract_block_clamped(&orig_block_pixels[(block_x + block_y * num_blocks_x) * 16], block_x * 4, block_y * 4, 4, 4);
-
-		// HACK HACK
-		const uint32_t max_rdo_jobs = 4;
 		
 		char rdo_fname[256];
 		FILE* pFile = nullptr;
@@ -4289,7 +4258,7 @@ static bool test_mode(command_line_params& opts)
 		size_t data_size = 0;
 
 		// Test ETC1S
-		flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagPrintStats | cFlagPrintStatus;
+		flags_and_quality = 0 | cFlagPrintStats | cFlagPrintStatus;
 		
 		{
 			printf("**** Testing ETC1S non-OpenCL level 1\n");
@@ -4354,7 +4323,7 @@ static bool test_mode(command_line_params& opts)
 			printf("**** Testing ETC1S OpenCL level 1\n");
 
 			// Test ETC1S OpenCL level 1
-			flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUseOpenCL | cFlagPrintStats | cFlagPrintStatus;
+			flags_and_quality = 0 | cFlagUseOpenCL | cFlagPrintStats | cFlagPrintStatus;
 
 			void *pData = basis_compress(source_images, flags_and_quality, uastc_rdo_quality, &data_size, &stats);
 			if (!pData)
@@ -4393,7 +4362,7 @@ static bool test_mode(command_line_params& opts)
 		{
 			printf("**** Testing UASTC\n");
 
-			flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUASTC | cFlagPrintStats | cFlagPrintStatus;
+			flags_and_quality = 0 | cFlagUASTC | cFlagPrintStats | cFlagPrintStatus;
 
 			void* pData = basis_compress(source_images, flags_and_quality, uastc_rdo_quality, &data_size, &stats);
 			if (!pData)
@@ -4492,9 +4461,9 @@ static int main_internal(int argc, const char **argv)
 	}
 
 #if BASISU_SUPPORT_SSE
-	printf("Using SSE 4.1: %u, Multithreading: %u, Zstandard support: %u, OpenCL: %u\n", g_cpu_supports_sse41, (uint32_t)opts.m_comp_params.m_multithreading, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
+	printf("Using SSE 4.1: %u, Zstandard support: %u, OpenCL: %u\n", g_cpu_supports_sse41, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
 #else
-	printf("Multithreading: %u, Zstandard support: %u, OpenCL: %u\n", (uint32_t)opts.m_comp_params.m_multithreading, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
+	printf("Zstandard support: %u, OpenCL: %u\n",  basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
 #endif
 		
 	if (!opts.process_listing_files())

@@ -82,12 +82,6 @@ namespace basisu
 			error_printf("basis_compressor::init: basisu_encoder_init() MUST be called before using any encoder functionality!\n");
 			return false;
 		}
-
-		if (!params.m_pJob_pool)
-		{
-			error_printf("basis_compressor::init: A non-null job_pool pointer must be specified\n");
-			return false;
-		}
 				
 		m_params = params;
 				
@@ -132,7 +126,6 @@ namespace basisu
 				m_params.m_swizzle[2],
 				m_params.m_swizzle[3]);
 			PRINT_BOOL_VALUE(m_renormalize);
-			PRINT_BOOL_VALUE(m_multithreading);
 			PRINT_BOOL_VALUE(m_disable_hierarchical_endpoint_codebooks);
 												
 			PRINT_FLOAT_VALUE(m_endpoint_rdo_thresh);
@@ -1142,10 +1135,8 @@ namespace basisu
 		p.m_debug_images = m_params.m_debug_images;
 		p.m_compression_level = m_params.m_compression_level;
 		p.m_tex_type = m_params.m_tex_type;
-		p.m_multithreaded = m_params.m_multithreading;
 		p.m_disable_hierarchical_endpoint_codebooks = m_params.m_disable_hierarchical_endpoint_codebooks;
 		p.m_validate = m_params.m_validate_etc1s;
-		p.m_pJob_pool = m_params.m_pJob_pool;
 		p.m_pGlobal_codebooks = m_params.m_pGlobal_codebooks;
 		
 		// Don't keep trying to use OpenCL if it ever fails.
@@ -2143,7 +2134,6 @@ namespace basisu
 	}
 
 	bool basis_parallel_compress(
-		uint32_t total_threads,
 		const basisu::vector<basis_compressor_params>& params_vec,
 		basisu::vector< parallel_results >& results_vec)
 	{
@@ -2153,11 +2143,6 @@ namespace basisu
 			error_printf("basis_parallel_compress: basisu_encoder_init() MUST be called before using any encoder functionality!\n");
 			return false;
 		}
-
-		assert(total_threads >= 1);
-		total_threads = basisu::maximum<uint32_t>(total_threads, 1);
-
-		job_pool jpool(total_threads);
 
 		results_vec.resize(0);
 		results_vec.resize(params_vec.size());
@@ -2177,12 +2162,6 @@ namespace basisu
 			tm.start();
 
 			basis_compressor c;
-
-			// Dummy job pool
-			job_pool task_jpool(1);
-			params.m_pJob_pool = &task_jpool;
-			// TODO: Remove this flag entirely
-			params.m_multithreading = true;
 
 			// Stop using OpenCL if a failure ever occurs.
 			if (opencl_failed) {
@@ -2244,16 +2223,8 @@ namespace basisu
 
 		*pSize = 0;
 
-		// Initialize a job pool
-		uint32_t num_threads = 1;
-		if (flags_and_quality & cFlagThreaded)
-			num_threads = basisu::maximum<uint32_t>(1, std::thread::hardware_concurrency());
-
-		job_pool jp(num_threads);
-
 		// Initialize the compressor parameter struct
 		basis_compressor_params comp_params;
-		comp_params.m_pJob_pool = &jp;
 
 		comp_params.m_y_flip = (flags_and_quality & cFlagYFlip) != 0;
 		comp_params.m_debug = (flags_and_quality & cFlagDebug) != 0;
@@ -2271,8 +2242,7 @@ namespace basisu
 			for (uint32_t i = 1; i < source_images.size(); i++)
 				comp_params.m_source_mipmap_images[0][i - 1] = source_images[i];
 		}
-				
-		comp_params.m_multithreading = (flags_and_quality & cFlagThreaded) != 0;
+
 		comp_params.m_use_opencl = (flags_and_quality & cFlagUseOpenCL) != 0;
 
 		comp_params.m_write_output_basis_files = false;
@@ -2421,7 +2391,7 @@ namespace basisu
 
 		image_stats stats;
 
-		uint32_t flags_and_quality = cFlagSRGB | cFlagThreaded | 255;
+		uint32_t flags_and_quality = cFlagSRGB | 255;
 		size_t comp_size = 0;
 
 		double best_cpu_time = 1e+9f, best_gpu_time = 1e+9f;
