@@ -2306,7 +2306,7 @@ namespace basisu
 
 					etc_block& blk = m_encoded_blocks[block_index];
 
-					if (block == get_source_pixel_block(block_index - 1)) {
+					if ((block_index > r.begin()) && (block == get_source_pixel_block(block_index - 1))) {
 						blk.set_raw_selector_bits(m_optimized_cluster_selectors[prev_best_cluster_index].get_raw_selector_bits());
 
 						m_block_selector_cluster_index[block_index] = prev_best_cluster_index;
