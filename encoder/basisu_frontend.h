@@ -318,8 +318,6 @@ namespace basisu
 		// The sorted subblock endpoint quant error for each endpoint cluster
 		basisu::vector<subblock_endpoint_quant_err> m_subblock_endpoint_quant_err_vec;
 
-		std::mutex m_lock;
-
 		bool m_opencl_failed;
 
 		//-----------------------------------------------------------------------------

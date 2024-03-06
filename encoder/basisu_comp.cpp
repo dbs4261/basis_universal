@@ -2167,69 +2167,60 @@ namespace basisu
 		
 		std::atomic<bool> opencl_failed;
 		opencl_failed = false;
+		
+		tbb::parallel_for(uint32_t{0}, params_vec.size(),
+		        [&](const uint32_t& pindex) {
+			basis_compressor_params params = params_vec[pindex];
+			parallel_results& results = results_vec[pindex];
 
-		for (uint32_t pindex = 0; pindex < params_vec.size(); pindex++)
-		{
-			jpool.add_job([pindex, &params_vec, &results_vec, &result, &opencl_failed] {
+			interval_timer tm;
+			tm.start();
 
-				basis_compressor_params params = params_vec[pindex];
-				parallel_results& results = results_vec[pindex];
+			basis_compressor c;
 
-				interval_timer tm;
-				tm.start();
+			// Dummy job pool
+			job_pool task_jpool(1);
+			params.m_pJob_pool = &task_jpool;
+			// TODO: Remove this flag entirely
+			params.m_multithreading = true;
 
-				basis_compressor c;
-				
-				// Dummy job pool
-				job_pool task_jpool(1);
-				params.m_pJob_pool = &task_jpool;
-				// TODO: Remove this flag entirely
-				params.m_multithreading = true; 
-				
-				// Stop using OpenCL if a failure ever occurs.
-				if (opencl_failed)
-					params.m_use_opencl = false;
+			// Stop using OpenCL if a failure ever occurs.
+			if (opencl_failed) {
+				params.m_use_opencl = false;
+			}
 
-				bool status = c.init(params);
-				
-				if (c.get_opencl_failed())
+			bool status = c.init(params);
+
+			if (c.get_opencl_failed()) {
+				opencl_failed = true;
+			}
+
+			if (status) {
+				basis_compressor::error_code ec = c.process();
+
+				if (c.get_opencl_failed()) {
 					opencl_failed = true;
-
-				if (status)
-				{
-					basis_compressor::error_code ec = c.process();
-
-					if (c.get_opencl_failed())
-						opencl_failed = true;
-
-					results.m_error_code = ec;
-
-					if (ec == basis_compressor::cECSuccess)
-					{
-						results.m_basis_file = c.get_output_basis_file();
-						results.m_ktx2_file = c.get_output_ktx2_file();
-						results.m_stats = c.get_stats();
-						results.m_basis_bits_per_texel = c.get_basis_bits_per_texel();
-						results.m_any_source_image_has_alpha = c.get_any_source_image_has_alpha();
-					}
-					else
-					{
-						result = false;
-					}
 				}
-				else
-				{
-					results.m_error_code = basis_compressor::cECFailedInitializing;
-					
+
+				results.m_error_code = ec;
+
+				if (ec == basis_compressor::cECSuccess) {
+					results.m_basis_file = c.get_output_basis_file();
+					results.m_ktx2_file = c.get_output_ktx2_file();
+					results.m_stats = c.get_stats();
+					results.m_basis_bits_per_texel = c.get_basis_bits_per_texel();
+					results.m_any_source_image_has_alpha = c.get_any_source_image_has_alpha();
+				} else {
 					result = false;
 				}
+			} else {
+				results.m_error_code = basis_compressor::cECFailedInitializing;
 
-				results.m_total_time = tm.get_elapsed_secs();
-			} );
+				result = false;
+			}
 
-		} // pindex
-
-		jpool.wait_for_all();
+			results.m_total_time = tm.get_elapsed_secs();
+		});
 
 		if (opencl_failed)
 			error_printf("An OpenCL error occured sometime during compression. The compressor fell back to CPU processing after the failure.\n");
