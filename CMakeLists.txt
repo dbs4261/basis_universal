@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.24)
 
 project(basisu
 	VERSION 1.16.4
@@ -53,7 +53,7 @@ check_library_exists(m sin "" HAVE_LIB_M)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
 if (NOT CMAKE_CXX_LTO_SUPPORTED)
-	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}")
+	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
 endif()
 
 include(cmake/onetbb-provider.cmake)
@@ -98,10 +98,10 @@ target_compile_options(basisu-tool PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
 	$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value;-Wno-reorder;-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
-	$<$<CXX_COMPILER_ID:EMSCRIPTEN>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
-	$<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN,MSVC>>:-Wno-pedantic>
+	$<$<PLATFORM_ID:Emscripten>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
+	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+	$<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>:-Wno-pedantic>
 )
 set_target_properties(basisu-tool PROPERTIES
 	INTERPROCEDURAL_OPTIMIZATION

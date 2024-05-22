@@ -369,11 +369,11 @@ namespace basisu
 
 #define BASISU_DEFINE_BITWISE_COPYABLE(Q) template<> struct bitwise_copyable<Q> { enum { cFlag = true }; };
 
-#define BASISU_IS_POD(T) __is_pod(T)
+#define BASISU_IS_POD(T) (std::is_trivial<T>::value && std::is_standard_layout<T>::value)
 
 #define BASISU_IS_SCALAR_TYPE(T) (scalar_type<T>::cFlag)
 
-#if defined(__GNUC__) && __GNUC__<5
+#if __cplusplus < 201103L && defined(__GNUC__) && __GNUC__<5
    #define BASISU_IS_TRIVIALLY_COPYABLE(...) __has_trivial_copy(__VA_ARGS__)
 #else
    #define BASISU_IS_TRIVIALLY_COPYABLE(...) std::is_trivially_copyable<__VA_ARGS__>::value
@@ -26248,7 +26248,7 @@ namespace basist
 		{
 			m_format = basist::basis_tex_format::cETC1S;
 			
-			// 3.10.2: "Whether the image has 1 or 2 slices can be determined from the DFD’s sample count."
+			// 3.10.2: "Whether the image has 1 or 2 slices can be determined from the DFDï¿½s sample count."
 			// If m_has_alpha is true it may be 2-channel RRRG or 4-channel RGBA, but we let the caller deal with that.
 			m_has_alpha = (m_header.m_dfd_byte_length == 60);
 			

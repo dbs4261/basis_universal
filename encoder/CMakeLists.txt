@@ -83,7 +83,7 @@ target_link_libraries(basisu_encoder
 target_compile_definitions(basisu_encoder PUBLIC
     $<$<CONFIG:Debug>:_DEBUG>
     BASISD_SUPPORT_KTX2_ZSTD=$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>
-    BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>>
+    BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<PLATFORM_ID:Emscripten>>>
 )
 target_compile_definitions(basisu_encoder PRIVATE
     BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
@@ -93,15 +93,15 @@ target_compile_definitions(basisu_encoder PRIVATE
 )
 
 target_compile_options(basisu_encoder PRIVATE
-    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<CXX_COMPILER_ID:MSVC,EMSCRIPTEN>>>:-msse4.1>
+    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>>:-msse4.1>
     $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<CXX_COMPILER_ID:MSVC>>:/arch:SSE4.1>
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
-    $<$<CXX_COMPILER_ID:EMSCRIPTEN>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type -Wno-unused-value>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN,MSVC>>:-Wno-pedantic>
+    $<$<PLATFORM_ID:Emscripten>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+    $<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type -Wno-unused-value>
+    $<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
+    $<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>:-Wno-pedantic>
 )
 
 install(TARGETS basisu_encoder EXPORT basisu-targets
