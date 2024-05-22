@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.24)
 
 project(basisu
 	VERSION 1.16.4
@@ -53,7 +53,7 @@ check_library_exists(m sin "" HAVE_LIB_M)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
 if (NOT CMAKE_CXX_LTO_SUPPORTED)
-	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}")
+	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
 endif()
 
 if (BASISU_WITH_ZSTD)

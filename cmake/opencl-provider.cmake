@@ -1,4 +1,5 @@
-message(STATUS "Building OpenCL-Loader from source...")
+include_guard()
+
 include(FetchContent)
 FetchContent_Declare(OpenCL-Headers
     GIT_REPOSITORY "https://github.com/KhronosGroup/OpenCL-Headers.git"
