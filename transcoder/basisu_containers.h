@@ -184,14 +184,14 @@ namespace basisu
 
 #define BASISU_DEFINE_BITWISE_COPYABLE(Q) template<> struct bitwise_copyable<Q> { enum { cFlag = true }; };
 
-#define BASISU_IS_POD(T) __is_pod(T)
+#define BASISU_IS_POD(T) (std::is_trivial<T>::value && std::is_standard_layout<T>::value)
 
 #define BASISU_IS_SCALAR_TYPE(T) (scalar_type<T>::cFlag)
 
-#if !defined(BASISU_HAVE_STD_TRIVIALLY_COPYABLE) && defined(__GNUC__) && __GNUC__<5
+#if __cplusplus < 201103L && defined(__GNUC__) && __GNUC__<5
    #define BASISU_IS_TRIVIALLY_COPYABLE(...) __has_trivial_copy(__VA_ARGS__)
 #else
-   #define BASISU_IS_TRIVIALLY_COPYABLE(...) std::is_trivially_copyable<__VA_ARGS__>::value
+   #define BASISU_IS_TRIVIALLY_COPYABLE(...) (std::is_trivially_copyable<__VA_ARGS__>::value)
 #endif
 
 // TODO: clean this up
