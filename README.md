@@ -244,9 +244,9 @@ To enable compression support compile the JavaScript wrappers in `webgl/transcod
 
 You can call the encoder directly, instead of using the command line tool. We'll be adding documentation and some examples by the end of the year. For now, some important notes:
 
-First, ALWAYS call ```basisu::basisu_encoder_init()``` to initialize the library. Otherwise, you'll get undefined behavior or black textures.
+First, ALWAYS call ```basisu::basisu_encoder_init()``` to initialize the library. Otherwise, you'll get undefined behavior or black textures. You will want to do this inside ```tbb::collaborative_call_once(...)``` do deal with multiple threads able to encounter the first call to the library.
 
-Create a job pool, fill in the ```basis_compress_params``` struct, then call ```basisu::basis_compressor::init()```, then ```basisu::basis_compressor::process()```. Like this for UASTC:
+Fill in the ```basis_compress_params``` struct, then call ```basisu::basis_compressor::init()```, then ```basisu::basis_compressor::process()```. Like this for UASTC:
 
 ```
 bool test()
@@ -270,34 +270,32 @@ bool test()
 	basisCompressorParams.m_out_filename = "test.basis";
 
 	basisCompressorParams.m_uastc = true;
-	basisCompressorParams.m_rdo_uastc_multithreading = false;
-	basisCompressorParams.m_multithreading = false;
 	basisCompressorParams.m_debug = true;
 	basisCompressorParams.m_status_output = true;
 	basisCompressorParams.m_compute_stats = true;
 	
-	basisu::job_pool jpool(1);
-	basisCompressorParams.m_pJob_pool = &jpool;
-
-	basisu::basis_compressor basisCompressor;
-	basisu::enable_debug_printf(true);
-
-	bool ok = basisCompressor.init(basisCompressorParams);
-	if (ok)
-	{
-		basisu::basis_compressor::error_code result = basisCompressor.process();
-
-		if (result == basisu::basis_compressor::cECSuccess)
-			printf("Success\n");
-		else
-		{
-			printf("Failure\n");
-			ok = false;
-		}
-	}
-	else
-		printf("Failure\n");
-	return ok;
+	tbb::task_arena arena(num_threads);
+	return arena.execute([&](){
+        basisu::basis_compressor basisCompressor;
+        basisu::enable_debug_printf(true);
+    
+        bool ok = basisCompressor.init(basisCompressorParams);
+        if (ok)
+        {
+            basisu::basis_compressor::error_code result = basisCompressor.process();
+    
+            if (result == basisu::basis_compressor::cECSuccess)
+                printf("Success\n");
+            else
+            {
+                printf("Failure\n");
+                ok = false;
+            }
+        }
+        else
+            printf("Failure\n");
+        return ok;
+    });
 }
 ```
 

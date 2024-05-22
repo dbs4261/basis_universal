@@ -56,6 +56,8 @@ if (NOT CMAKE_CXX_LTO_SUPPORTED)
 	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}")
 endif()
 
+include(cmake/onetbb-provider.cmake)
+
 if (BASISU_WITH_ZSTD)
 	include(cmake/zstd-provider.cmake)
 	if (NOT TARGET zstd::libzstd_static)
