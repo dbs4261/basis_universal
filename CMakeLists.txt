@@ -56,8 +56,6 @@ if (NOT CMAKE_CXX_LTO_SUPPORTED)
 	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
 endif()
 
-include(cmake/onetbb-provider.cmake)
-
 if (BASISU_WITH_ZSTD)
 	include(cmake/zstd-provider.cmake)
 	if (NOT TARGET zstd::libzstd_static)
@@ -80,7 +78,7 @@ else()
 	message(STATUS "OpenCL disabled")
 endif()
 
-find_package(TBB REQUIRED)
+find_package(TBB 2021.4 CONFIG REQUIRED)
 
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
