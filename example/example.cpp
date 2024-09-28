@@ -4,9 +4,9 @@
 // It should be compiled with the preprocessor macros BASISU_SUPPORT_SSE (typically 1) and BASISU_SUPPORT_OPENCL (typically 1). 
 // They should be set to the same preprocesor options as the encoder.
 // If OpenCL is enabled, the "..\OpenCL" directory should be in your compiler's include path. Additionally, link against "..\OpenCL\lib\opencl64.lib".
-#include "../encoder/basisu_comp.h"
-#include "../transcoder/basisu_transcoder.h"
-#include "../encoder/basisu_gpu_texture.h"
+#include "encoder/basisu_comp.h"
+#include "transcoder/basisu_transcoder.h"
+#include "encoder/basisu_gpu_texture.h"
 
 #define USE_ENCODER (1)
 

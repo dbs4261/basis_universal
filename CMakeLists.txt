@@ -1,6 +1,6 @@
 # Important: The Basis Universal encoder and transcoder libraries must be compiled with -fno-strict-aliasing (MSVC's default, and also the Linux kernel).
 # It should also work without this option, but we do not test with it.
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.25)
 
 project(basisu
     VERSION 1.16.4
@@ -57,7 +57,7 @@ check_library_exists(m sin "" HAVE_LIB_M)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
-if (NOT CMAKE_CXX_LTO_SUPPORTED)
+if (NOT CMAKE_CXX_LTO_SUPPORTED AND NOT EMSCRIPTEN)
 	message(WARNING "Interprocedural Optimization was requested but not supported with details:"
             "\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
 endif()
@@ -84,13 +84,18 @@ else()
 	message(STATUS "OpenCL disabled")
 endif()
 
+if (NOT DEFINED CMAKE_STRIP)
+	find_program(CMAKE_STRIP strip)
+endif()
+
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
+add_subdirectory(example)
 
 add_executable(basisu basisu_tool.cpp)
 
 target_link_libraries(basisu PRIVATE basisu::encoder)
-target_compile_features(basisu INTERFACE c_std_99 cxx_std_11)
+target_compile_features(basisu INTERFACE cxx_std_11)
 target_compile_definitions(basisu PRIVATE
 	BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
 	$<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
@@ -99,22 +104,20 @@ target_compile_definitions(basisu PRIVATE
 target_compile_options(basisu PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
-	$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value;-Wno-reorder;-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
-	$<$<PLATFORM_ID:Emscripten>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
-	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>:-Wno-pedantic>
 )
 set_target_properties(basisu PROPERTIES
 	INTERPROCEDURAL_OPTIMIZATION
 		$<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
 	POSITION_INDEPENDENT_CODE ON
     RUNTIME_OUTPUT_NAME "basisu"
+	# Prevent MSVC from creating separate output directories for each configuration
     RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}>
 )
+
 if (DEFINED CMAKE_STRIP AND UNIX AND NOT EMSCRIPTEN)
-    add_custom_command(TARGET basisu POST_BUILD COMMAND $<$<CONFIG:Release>:${CMAKE_STRIP} $<$<NOT:$<BOOL:${APPLE}>>:-g> -X -x "$<TARGET_FILE:basisu>">)
-endif(DEFINED CMAKE_STRIP)
+	add_custom_command(TARGET basisu POST_BUILD COMMAND
+		"$<$<CONFIG:Release>: ${CMAKE_STRIP} $<$<NOT:$<BOOL:${APPLE}>>:-g>  -X -x $<TARGET_FILE:basisu>>")
+endif()
 
 install(TARGETS basisu
 	RUNTIME COMPONENT BasisU_Applications

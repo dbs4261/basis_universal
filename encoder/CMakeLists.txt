@@ -1,37 +1,48 @@
 set(BASISU_ENCODER_SOURCES
+    basisu_astc_hdr_enc.cpp
     basisu_backend.cpp
     basisu_basis_file.cpp
     basisu_bc7enc.cpp
-    basisu_bc7enc.h
     basisu_comp.cpp
     basisu_enc.cpp
     basisu_etc.cpp
     basisu_frontend.cpp
     basisu_gpu_texture.cpp
-    basisu_kernels_declares.h
-    basisu_kernels_imp.h
     basisu_kernels_sse.cpp
-    basisu_ocl_kernels.h
     basisu_opencl.cpp
     basisu_pvrtc1_4.cpp
     basisu_resample_filters.cpp
-    basisu_resampler_filters.h
     basisu_resampler.cpp
-    basisu_resampler.h
     basisu_ssim.cpp
     basisu_uastc_enc.cpp
+    jpgd.cpp
+    pvpngreader.cpp
+    3rdparty/android_astc_decomp.cpp
+    3rdparty/tinyexr.cpp
+)
+
+set(BASISU_ENCODER_PRIVATE_HEADERS
+    basisu_bc7enc.h
+    basisu_kernels_declares.h
+    basisu_ocl_kernels.h
+    basisu_pvrtc1_4.h
+    basisu_resampler_filters.h
+    basisu_resampler.h
     cppspmd_flow.h
     cppspmd_math.h
     cppspmd_math_declares.h
     cppspmd_sse.h
     cppspmd_type_aliases.h
-    jpgd.cpp
     jpgd.h
-    pvpngreader.cpp
     pvpngreader.h
+    3rdparty/android_astc_decomp.h
+    3rdparty/qoi.h
+    3rdparty/tinydds.h
+    3rdparty/tinyexr.h
 )
 
 set(BASISU_ENCODER_PUBLIC_HEADERS
+    basisu_astc_hdr_enc.h
     basisu_backend.h
     basisu_basis_file.h
     basisu_comp.h
@@ -39,9 +50,9 @@ set(BASISU_ENCODER_PUBLIC_HEADERS
     basisu_etc.h
     basisu_frontend.h
     basisu_gpu_texture.h
+    basisu_kernels_imp.h
     basisu_miniz.h
     basisu_opencl.h
-    basisu_pvrtc1_4.h
     basisu_ssim.h
     basisu_uastc_enc.h
 )
@@ -52,6 +63,12 @@ else()
     add_library(basisu_encoder STATIC ${BASISU_ENCODER_SOURCES})
 endif()
 add_library(basisu::encoder ALIAS basisu_encoder)
+
+# For IDE integration
+target_sources(basisu_encoder PRIVATE
+    ${BASISU_ENCODER_PUBLIC_HEADERS}
+    ${BASISU_ENCODER_PRIVATE_HEADERS}
+)
 
 target_compile_features(basisu_encoder PRIVATE cxx_std_11)
 
@@ -71,36 +88,38 @@ set_target_properties(basisu_encoder PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
-target_link_libraries(basisu_encoder
-    PUBLIC
-        basisu::transcoder
-        $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
-        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
-        $<$<AND:$<BOOL:${BASISU_WITH_OPENCL_LOADER}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
+target_link_libraries(basisu_encoder PUBLIC
+    basisu::transcoder
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
+)
+target_link_libraries(basisu_encoder PRIVATE
+    $<$<AND:$<BOOL:${BASISU_WITH_OPENCL_LOADER}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
+    $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
 )
 
 target_compile_definitions(basisu_encoder PUBLIC
     $<$<CONFIG:Debug>:_DEBUG>
     BASISD_SUPPORT_KTX2_ZSTD=$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>
     BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<PLATFORM_ID:Emscripten>>>
+    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>  # Doesn't need to be public, but is based on usage.
 )
 target_compile_definitions(basisu_encoder PRIVATE
-    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
-    $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
         -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 target_compile_options(basisu_encoder PRIVATE
-    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>>:-msse4.1>
-    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<CXX_COMPILER_ID:MSVC>>:/arch:SSE4.1>
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
-    $<$<PLATFORM_ID:Emscripten>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type -Wno-unused-value>
-    $<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>:-Wno-pedantic>
+    $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>>:-msse4.1 -Wno-unused-parameter>
+    # Were cppspmd to support emscripten, this flag would need to be added.
+    # $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<PLATFORM_ID:Emscripten>>:-msimd128>
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess -Wno-unused-variable>
+)
+target_compile_options(basisu_encoder PUBLIC
+        $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>
+        $<$<PLATFORM_ID:Emscripten>:-Wno-unused-parameter>
 )
 
 install(TARGETS basisu_encoder EXPORT basisu-targets

@@ -1,4 +1,4 @@
-set(BASISU_TRANSCODER_HEADERS
+set(BASISU_TRANSCODER_PUBLIC_HEADERS
     basisu.h
     basisu_containers.h
     basisu_containers_impl.h
@@ -14,6 +14,11 @@ else()
     add_library(basisu_transcoder STATIC basisu_transcoder.cpp)
 endif()
 add_library(basisu::transcoder ALIAS basisu_transcoder)
+
+# For IDE integration
+target_sources(basisu_transcoder PRIVATE
+    ${BASISU_TRANSCODER_PUBLIC_HEADERS}
+)
 
 target_compile_features(basisu_transcoder PRIVATE cxx_std_11)
 
@@ -33,33 +38,35 @@ set_target_properties(basisu_transcoder PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
+target_link_libraries(basisu_transcoder PUBLIC
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
+)
 target_link_libraries(basisu_transcoder PRIVATE
     $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
 )
 
 target_compile_definitions(basisu_transcoder PUBLIC $<$<CONFIG:Debug>:_DEBUG>)
 target_compile_definitions(basisu_transcoder PRIVATE
-    $<$<CXX_COMPILER_ID:GNU>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
         -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 target_compile_options(basisu_transcoder PRIVATE
-    $<$<CXX_COMPILER_ID:GNU>:-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable;-Wno-unused-value;-Wno-class-memaccess;-Wno-maybe-uninitialized>
-    $<$<AND:$<CXX_COMPILER_ID:Clang>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,14.0>>:-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
-    $<$<CXX_COMPILER_ID:EMSCRIPTEN>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-    $<$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN,MSVC>>:-Wno-pedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+    $<$<CXX_COMPILER_ID:AppleClang,GNU,Clang>:-Wall -Wextra -Werror -Wno-unused-function>
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
+)
+target_compile_options(basisu_transcoder PUBLIC
+    $<$<CXX_COMPILER_ID:AppleClang,Clang>:-Wno-unknown-warning-option>
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value>
 )
 
 # Format Support
 target_compile_definitions(basisu_transcoder PRIVATE
     BASISD_SUPPORT_FXT1=$<BOOL:${BASISU_SUPPORT_FTX1}>
-    BASISD_SUPPORT_ATC=$<AND:$<BOOL:${BASISU_SUPPORT_ATC}>,$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>>
-    BASISD_SUPPORT_PVRTC2=$<AND:$<BOOL:${BASISU_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY}>,$<NOT:$<CXX_COMPILER_ID:EMSCRIPTEN>>>
+    BASISD_SUPPORT_ATC=$<AND:$<BOOL:${BASISU_SUPPORT_ATC}>,$<NOT:$<PLATFORM_ID:Emscripten>>>
+    BASISD_SUPPORT_PVRTC2=$<AND:$<BOOL:${BASISU_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY}>,$<NOT:$<PLATFORM_ID:Emscripten>>>
 )
 
 install(TARGETS basisu_transcoder EXPORT basisu-targets
@@ -67,7 +74,7 @@ install(TARGETS basisu_transcoder EXPORT basisu-targets
     LIBRARY COMPONENT BasisUniversal_Runtime NAMELINK_COMPONENT BasisUniversal_Development
     ARCHIVE COMPONENT BasisUniversal_Development
 )
-install(FILES ${BASISU_TRANSCODER_HEADERS}
+install(FILES ${BASISU_TRANSCODER_PUBLIC_HEADERS}
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/basisu/transcoder/
     COMPONENT BasisUniversal_Development
 )

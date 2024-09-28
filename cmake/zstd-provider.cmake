@@ -1,7 +1,7 @@
 include_guard()
 
 include(CMakeDependentOption)
-cmake_dependent_option(ZSTD_MULTITHREAD_SUPPORT "MULTITHREADING SUPPORT" ON "NOT ${CXX_COMPILER_ID} MATCHES EMSCRIPTEN" "UNUSED")
+cmake_dependent_option(ZSTD_MULTITHREAD_SUPPORT "MULTITHREADING SUPPORT" ON "NOT ${CMAKE_SYSTEM_NAME} MATCHES EMSCRIPTEN" "UNUSED")
 
 include(FetchContent)
 FetchContent_Declare(zstd
@@ -15,9 +15,10 @@ FetchContent_Declare(zstd
                 -DZSTD_BUILD_STATIC:BOOL=ON
                 -DZSTD_BUILD_SHARED:BOOL=OFF"
     OVERRIDE_FIND_PACKAGE
+    SYSTEM
 )
 
-if (NOT ${CXX_COMPILER_ID} MATCHES "EMSCRIPTEN")
+if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "EMSCRIPTEN")
     set(ZSTD_MULTITHREAD_SUPPORT ON CACHE INTERNAL "" FORCE)
 endif()
 
@@ -33,5 +34,8 @@ FetchContent_GetProperties(zstd SOURCE_DIR ZSTD_SOURCE_DIR)
 target_include_directories(libzstd_static PUBLIC
     "$<BUILD_INTERFACE:${ZSTD_SOURCE_DIR}/lib>"
     "$<INSTALL_INTERFACE:include>"
+)
+target_compile_options(libzstd_static PRIVATE
+    $<$<PLATFORM_ID:Emscripten>:-Wno-bitwise-instead-of-logical>
 )
 add_library(zstd::libzstd_static ALIAS libzstd_static)
