@@ -93,7 +93,7 @@ target_link_libraries(basisu_encoder PUBLIC
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
 )
 target_link_libraries(basisu_encoder PRIVATE
-    $<$<AND:$<BOOL:${BASISU_WITH_OPENCL_LOADER}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
+    $<$<AND:$<BOOL:${BASISU_WITH_OPENCL}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
     $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
 )
 
@@ -101,7 +101,7 @@ target_compile_definitions(basisu_encoder PUBLIC
     $<$<CONFIG:Debug>:_DEBUG>
     BASISD_SUPPORT_KTX2_ZSTD=$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>
     BASISU_SUPPORT_SSE=$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<PLATFORM_ID:Emscripten>>>
-    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>  # Doesn't need to be public, but is based on usage.
+    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL}>  # Doesn't need to be public, but is based on usage.
 )
 target_compile_definitions(basisu_encoder PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>

@@ -2,7 +2,7 @@ add_executable(example example.cpp)
 target_link_libraries(example PRIVATE basisu::encoder)
 target_compile_features(example INTERFACE cxx_std_11)
 target_compile_definitions(example PRIVATE
-    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
+    BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL}>
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
         -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
