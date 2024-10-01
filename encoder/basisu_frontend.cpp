@@ -1,5 +1,5 @@
 // basisu_frontend.cpp
-// Copyright (C) 2019-2021 Binomial LLC. All Rights Reserved.
+// Copyright (C) 2019-2024 Binomial LLC. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1663,13 +1663,13 @@ namespace basisu
 										if (!best_err) {
 											break;
 										}
-									} // r
+									}
 
 									total_err += best_err;
 									if (total_err > best_cluster_err) {
 										break;
 									}
-								} // p
+								}
 							} else {
 #if BASISU_SUPPORT_SSE
 								find_lowest_error_perceptual_rgb_4_N_sse41((int64_t*)&total_err, subblock_colors, pSubblock_pixels, num_subblock_pixels, best_cluster_err);
@@ -1686,13 +1686,13 @@ namespace basisu
 										if (!best_err) {
 											break;
 										}
-									} // r
+									}
 
 									total_err += best_err;
 									if (total_err > best_cluster_err) {
 										break;
 									}
-								} // p
+								}
 							} else {
 #if BASISU_SUPPORT_SSE
 								find_lowest_error_linear_rgb_4_N_sse41((int64_t*)&total_err, subblock_colors, pSubblock_pixels, num_subblock_pixels, best_cluster_err);
@@ -2054,6 +2054,7 @@ namespace basisu
 				}
 
 				uint64_t overall_best_err = 0;
+				(void)overall_best_err;
 
 				uint64_t total_err[4][4][4];
 				clear_obj(total_err);
@@ -2094,7 +2095,7 @@ namespace basisu
 								best_err = total_err[y][x][s];
 								best_sel = (uint8_t)s;
 							}
-						} // s
+						}
 
 						m_optimized_cluster_selectors[cluster_index].set_selector(x, y, best_sel);
 
@@ -2331,8 +2332,8 @@ namespace basisu
 						for (uint32_t sel = 0; sel < 4; ++sel) {
 							for (uint32_t i = 0; i < 16; ++i) {
 								trial_errors[sel][i] = color_distance(false, pBlock_pixels[i], trial_block_colors[sel], false);
-							} // i
-						} // sel
+							}
+						}
 					}
 
 					// Compute the minimum possible errors (given any selectors) for pixels 0-15
@@ -2340,28 +2341,28 @@ namespace basisu
 					for (uint32_t i = 0; i < 16; i++) {
 						min_possible_error_0_15 += basisu::minimum(trial_errors[0][i],
 								trial_errors[1][i], trial_errors[2][i], trial_errors[3][i]);
-					} // i
+					}
 
 					// Compute the minimum possible errors (given any selectors) for pixels 4-15
 					uint64_t min_possible_error_4_15 = 0;
 					for (uint32_t i = 4; i < 16; i++) {
 						min_possible_error_4_15 += basisu::minimum(trial_errors[0][i],
 								trial_errors[1][i], trial_errors[2][i], trial_errors[3][i]);
-					} // i
+					}
 
 					// Compute the minimum possible errors (given any selectors) for pixels 8-15
 					uint64_t min_possible_error_8_15 = 0;
 					for (uint32_t i = 8; i < 16; i++) {
 						min_possible_error_8_15 += basisu::minimum(trial_errors[0][i],
 								trial_errors[1][i], trial_errors[2][i], trial_errors[3][i]);
-					} // i
+					}
 
 					// Compute the minimum possible errors (given any selectors) for pixels 12-15
 					uint64_t min_possible_error_12_15 = 0;
 					for (uint32_t i = 12; i < 16; i++) {
 						min_possible_error_12_15 += basisu::minimum(trial_errors[0][i],
 								trial_errors[1][i], trial_errors[2][i], trial_errors[3][i]);
-					} // i
+					}
 
 					uint64_t best_cluster_err = INT64_MAX;
 					uint32_t best_cluster_index = 0;

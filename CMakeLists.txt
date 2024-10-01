@@ -1,9 +1,11 @@
-cmake_minimum_required(VERSION 3.24)
+# Important: The Basis Universal encoder and transcoder libraries must be compiled with -fno-strict-aliasing (MSVC's default, and also the Linux kernel).
+# It should also work without this option, but we do not test with it.
+cmake_minimum_required(VERSION 3.25)
 
 project(basisu
-	VERSION 1.16.4
-	LANGUAGES CXX
-	HOMEPAGE_URL "https://github.com/BinomialLLC/basis_universal"
+    VERSION 1.16.4
+    LANGUAGES CXX
+    HOMEPAGE_URL "https://github.com/BinomialLLC/basis_universal"
 )
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -13,21 +15,28 @@ endif()
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BASISU_BUILD_SHARED_LIBS "Build BasisU with shared libraries" ${BUILD_SHARED_LIBS})
 option(BASISU_WITH_ZSTD "ZSTD support for KTX2 transcoding/encoding" ON)
-option(BASISU_WITH_OPENCL_LOADER "OpenCL support in encoder" OFF)
-option(BASISU_WITH_SSE41 "Build basisu with sse4.1 acceleration" ON)
+option(BASISU_WITH_OPENCL "OpenCL support in encoder" OFF)
 option(BASISU_WITH_ASAN "Build basisu with address sanitizer" OFF)
+if (EMSCRIPTEN)
+	set(BASISU_WITH_SSE41 OFF)
+else()
+	option(BASISU_WITH_SSE41 "Build basisu with sse4.1 acceleration" ON)
+endif()
 
 message(STATUS "${PROJECT_NAME} build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "BasisU requested build shared libraries: ${BASISU_BUILD_SHARED_LIBS}")
 message(STATUS "BasisU requested ZStandard support: ${BASISU_WITH_ZSTD}")
-message(STATUS "BasisU requested OpenCL support: ${BASISU_WITH_OPENCL_LOADER}")
+message(STATUS "BasisU requested OpenCL support: ${BASISU_WITH_OPENCL}")
 message(STATUS "BasisU requested SSE4.1 support: ${BASISU_WITH_SSE41}")
 message(STATUS "BasisU requested Address Sanitizer support: ${BASISU_WITH_ASAN}")
 
 # Notify about deprecated options
 if (DEFINED BUILD_X64)
 	message(DEPRECATION "BUILD_X64 option has been removed. Either add -DCMAKE_CXX_FLAGS=\"-m32\" "
-			"on Linux or pass -A Win32 on Windows to the cmake configure command")
+			"on Linux or pass -A Win32 on Windows to the cmake configure command. "
+            "The correct method is to define this in a toolchain.cmake file "
+            "and pass it to cmake with -DCMAKE_TOOLCHAIN_FILE."
+    )
 endif()
 if (DEFINED SSE)
 	message(DEPRECATION "SSE option has been renamed to BASISU_WITH_SSE41")
@@ -36,7 +45,7 @@ if (DEFINED ZSTD)
 	message(DEPRECATION "ZSTD option has been renamed to BASISU_WITH_ZSTD")
 endif()
 if (DEFINED OPENCL)
-	message(DEPRECATION "OPENCL option has been renamed to BASISU_WITH_OPENCL_LOADER")
+	message(DEPRECATION "OPENCL option has been renamed to BASISU_WITH_OPENCL")
 endif()
 if (DEFINED SAN)
 	message(DEPRECATION "SAN option has been renamed to BASISU_WITH_ASAN")
@@ -52,8 +61,9 @@ check_library_exists(m sin "" HAVE_LIB_M)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT CMAKE_CXX_LTO_SUPPORTED OUTPUT LTO_ERROR_DETAILS LANGUAGES CXX)
-if (NOT CMAKE_CXX_LTO_SUPPORTED)
-	message(WARNING "Interprocedural Optimization was requested but not supported with details:\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
+if (NOT CMAKE_CXX_LTO_SUPPORTED AND NOT EMSCRIPTEN)
+	message(WARNING "Interprocedural Optimization was requested but not supported with details:"
+            "\n${LTO_ERROR_DETAILS}\nEnd of IPO error details.")
 endif()
 
 if (BASISU_WITH_ZSTD)
@@ -65,49 +75,60 @@ if (BASISU_WITH_ZSTD)
 	endif()
 else()
 	message(STATUS "Zstandard disabled")
+	set(BASISU_WITH_ZSTD OFF)
 endif()
 
-if (BASISU_WITH_OPENCL_LOADER)
+if (BASISU_WITH_OPENCL)
 	include(cmake/opencl-provider.cmake)
 	if (NOT TARGET OpenCL::OpenCL)
 		message(FATAL_ERROR "OpenCL was requested but neither could be found nor compiled from source")
 	else()
 		message(STATUS "OpenCL enabled")
+		set(BASISU_WITH_OPENCL OFF)
 	endif()
 else()
 	message(STATUS "OpenCL disabled")
 endif()
 
-find_package(TBB 2021.4 CONFIG REQUIRED)
+include(cmake/onetbb-provider.cmake)
+find_package(TBB 2021.13 CONFIG REQUIRED)
+
+if (NOT DEFINED CMAKE_STRIP)
+	find_program(CMAKE_STRIP strip)
+endif()
 
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
+add_subdirectory(example)
 
-add_executable(basisu-tool basisu_tool.cpp)
+add_executable(basisu basisu_tool.cpp)
 
-target_link_libraries(basisu-tool PRIVATE basisu::encoder)
-target_compile_features(basisu-tool INTERFACE c_std_99 cxx_std_11)
-target_compile_definitions(basisu-tool PRIVATE
-	BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL_LOADER}>
+target_link_libraries(basisu PRIVATE basisu::encoder)
+target_compile_features(basisu INTERFACE cxx_std_11)
+target_compile_definitions(basisu PRIVATE
+	BASISU_SUPPORT_OPENCL=$<BOOL:${BASISU_WITH_OPENCL}>
 	$<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
 		-fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
-target_compile_options(basisu-tool PRIVATE
+target_compile_options(basisu PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
-	$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value;-Wno-reorder;-Wno-sign-compare;-Wno-unused-variable;-Wno-class-memaccess;-Wno-misleading-indentation;-Wno-extra;-Wno-deprecated-copy;-Wno-parentheses;-Wno-strict-aliasing>
-	$<$<PLATFORM_ID:Emscripten>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:GNU>>:-Wno-cast-function-type>
-	$<$<AND:$<NOT:$<PLATFORM_ID:Emscripten>>,$<CXX_COMPILER_ID:AppleClang,Clang>>:-Wno-nested-anon-types -Wno-gnu-anonymous-struct>
-	$<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>:-Wno-pedantic>
 )
-set_target_properties(basisu-tool PROPERTIES
+set_target_properties(basisu PROPERTIES
 	INTERPROCEDURAL_OPTIMIZATION
 		$<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
 	POSITION_INDEPENDENT_CODE ON
+    RUNTIME_OUTPUT_NAME "basisu"
+	# Prevent MSVC from creating separate output directories for each configuration
+    RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}>
 )
 
-install(TARGETS basisu-tool
+if (DEFINED CMAKE_STRIP AND UNIX AND NOT EMSCRIPTEN)
+	add_custom_command(TARGET basisu POST_BUILD COMMAND
+		"$<$<CONFIG:Release>: ${CMAKE_STRIP} $<$<NOT:$<BOOL:${APPLE}>>:-g>  -X -x $<TARGET_FILE:basisu>>")
+endif()
+
+install(TARGETS basisu
 	RUNTIME COMPONENT BasisU_Applications
 )
 
