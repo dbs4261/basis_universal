@@ -35,8 +35,6 @@
 
 namespace basisu
 {
-	const uint32_t cMaxCodebookCreationThreads = 8;
-
 	const uint32_t BASISU_MAX_ENDPOINT_REFINEMENT_STEPS = 3;
 	//const uint32_t BASISU_MAX_SELECTOR_REFINEMENT_STEPS = 3;
 

@@ -5183,7 +5183,7 @@ static int main_internal(int argc, const char **argv)
 #if BASISU_SUPPORT_SSE
 	printf("Using SSE 4.1: %u, Zstandard support: %u, OpenCL: %u\n", g_cpu_supports_sse41, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
 #else
-	printf("No SSE, Zstandard support: %u, OpenCL: %u\n", (uint32_t)opts.m_comp_params.m_multithreading, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
+	printf("No SSE, Zstandard support: %u, OpenCL: %u\n", basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
 #endif
 		
 	if (!opts.process_listing_files())
