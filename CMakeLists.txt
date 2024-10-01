@@ -22,6 +22,7 @@ if (EMSCRIPTEN)
 else()
 	option(BASISU_WITH_SSE41 "Build basisu with sse4.1 acceleration" ON)
 endif()
+option(BASISU_BUILD_EXAMPLE "Build BasisU example application" OFF)
 
 message(STATUS "${PROJECT_NAME} build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "BasisU requested build shared libraries: ${BASISU_BUILD_SHARED_LIBS}")
@@ -99,7 +100,9 @@ endif()
 
 add_subdirectory(transcoder)
 add_subdirectory(encoder)
-add_subdirectory(example)
+if (BASISU_BUILD_EXAMPLE)
+	add_subdirectory(example)
+endif()
 
 add_executable(basisu basisu_tool.cpp)
 
