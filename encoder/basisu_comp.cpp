@@ -26,7 +26,7 @@
 
 #include "basisu_opencl.h"
 
-#include "../transcoder/basisu_astc_hdr_core.h"
+#include "transcoder/basisu_astc_hdr_core.h"
 
 #if !BASISD_SUPPORT_KTX2
 #error BASISD_SUPPORT_KTX2 must be enabled (set to 1).

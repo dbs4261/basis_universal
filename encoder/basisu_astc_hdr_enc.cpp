@@ -1,6 +1,6 @@
 // basisu_astc_hdr_enc.cpp
 #include "basisu_astc_hdr_enc.h"
-#include "../transcoder/basisu_transcoder.h"
+#include "transcoder/basisu_transcoder.h"
 
 using namespace basist;
 

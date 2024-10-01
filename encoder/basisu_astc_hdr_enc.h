@@ -2,8 +2,9 @@
 #pragma once
 #include "basisu_enc.h"
 #include "basisu_gpu_texture.h"
-#include "../transcoder/basisu_astc_helpers.h"
-#include "../transcoder/basisu_astc_hdr_core.h"
+
+#include "transcoder/basisu_astc_helpers.h"
+#include "transcoder/basisu_astc_hdr_core.h"
 
 namespace basisu
 {
