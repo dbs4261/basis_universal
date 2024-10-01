@@ -89,13 +89,12 @@ set_target_properties(basisu_encoder PROPERTIES
 )
 
 target_link_libraries(basisu_encoder PUBLIC
-    basisu::transcoder
+    basisu::transcoder TBB::tbb
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${HAVE_LIB_M}>>:m>
 )
 target_link_libraries(basisu_encoder PRIVATE
     $<$<AND:$<BOOL:${BASISU_WITH_OPENCL}>,$<TARGET_EXISTS:OpenCL::OpenCL>>:OpenCL::OpenCL>
     $<$<AND:$<BOOL:${BASISU_WITH_ZSTD}>,$<TARGET_EXISTS:zstd::libzstd_static>>:zstd::libzstd_static>
-    TBB::tbb
 )
 
 target_compile_definitions(basisu_encoder PUBLIC

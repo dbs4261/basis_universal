@@ -5047,7 +5047,7 @@ static bool test_mode_hdr(command_line_params& opts)
 
 			printf("**** Testing UASTC HDR Level %u\n", uastc_hdr_level);
 
-			flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUASTC;// | cFlagPrintStats | cFlagPrintStatus;
+			flags_and_quality = 0 | cFlagUASTC;// | cFlagPrintStats | cFlagPrintStatus;
 			flags_and_quality |= cFlagHDRLDRImageSRGBToLinearConversion;
 			flags_and_quality |= uastc_hdr_level;
 

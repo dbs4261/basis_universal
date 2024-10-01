@@ -444,8 +444,7 @@ namespace basisu
 		const float LOWEST_BC6H_ERROR_WEIGHT = .1f;
 		m_params.m_uastc_hdr_options.m_bc6h_err_weight = m_params.m_hdr_favor_astc ? LOWEST_BC6H_ERROR_WEIGHT : DEFAULT_BC6H_ERROR_WEIGHT;
 
-		std::atomic<bool> any_failures;
-		any_failures = false;
+		std::atomic<bool> any_failures{false};
 
 		astc_hdr_block_stats enc_stats;
 
@@ -499,9 +498,10 @@ namespace basisu
 
 		std::map<uastc_blk_desc, uastc_blk_desc_stats> unique_block_descs;
 		std::mutex unique_block_desc_mutex;
+		std::atomic<uint32_t> total_blocks_processed{0};
 
-		for (uint32_t slice_index = 0; slice_index < m_slice_descs.size(); slice_index++)
-		{
+		tbb::parallel_for(uint32_t{0}, m_slice_descs.size(),
+				[&](uint32_t slice_index){
 			gpu_image& tex = m_uastc_slice_textures[slice_index];
 			basisu_backend_slice_desc& slice_desc = m_slice_descs[slice_index];
 			(void)slice_desc;
@@ -511,157 +511,135 @@ namespace basisu
 			const uint32_t total_blocks = tex.get_total_blocks();
 			const imagef& source_image = m_slice_images_hdr[slice_index];
 
-			std::atomic<uint32_t> total_blocks_processed;
-			total_blocks_processed = 0;
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, total_blocks, 256),
+					[&](const tbb::blocked_range<uint32_t>& range){
+				BASISU_NOTE_UNUSED(num_blocks_y);
 
-			const uint32_t N = 256;
-			for (uint32_t block_index_iter = 0; block_index_iter < total_blocks; block_index_iter += N)
-			{
-				const uint32_t first_index = block_index_iter;
-				const uint32_t last_index = minimum<uint32_t>(total_blocks, block_index_iter + N);
+				basisu::vector<astc_hdr_pack_results> all_results;
+				all_results.reserve(range.size());
 
-				// FIXME: This sucks, but we're having a stack size related problem with std::function with emscripten.
-#ifndef __EMSCRIPTEN__
-				m_params.m_pJob_pool->add_job([this, first_index, last_index, num_blocks_x, num_blocks_y, total_blocks, &source_image,
-					&tex, &total_blocks_processed, &any_failures, &enc_stats, &unique_block_descs, &unique_block_desc_mutex]
+				for (uint32_t block_index = range.begin(); block_index < range.end(); ++block_index) {
+					const uint32_t block_x = block_index % num_blocks_x;
+					const uint32_t block_y = block_index / num_blocks_x;
+
+					vec4F block_pixels[16];
+
+					source_image.extract_block_clamped(&block_pixels[0], block_x * 4, block_y * 4, 4, 4);
+
+					basist::astc_blk& dest_block = *(basist::astc_blk*)tex.get_block_ptr(block_x, block_y);
+
+					float rgb_pixels[16 * 3];
+					basist::half_float rgb_pixels_half[16 * 3];
+					for (uint32_t i = 0; i < 16; i++)
 					{
-#endif
-						BASISU_NOTE_UNUSED(num_blocks_y);
+						rgb_pixels[i * 3 + 0] = block_pixels[i][0];
+						rgb_pixels_half[i * 3 + 0] = float_to_half_non_neg_no_nan_inf(block_pixels[i][0]);
 
-						basisu::vector<astc_hdr_pack_results> all_results;
-						all_results.reserve(256);
+						rgb_pixels[i * 3 + 1] = block_pixels[i][1];
+						rgb_pixels_half[i * 3 + 1] = float_to_half_non_neg_no_nan_inf(block_pixels[i][1]);
 
-						for (uint32_t block_index = first_index; block_index < last_index; block_index++)
+						rgb_pixels[i * 3 + 2] = block_pixels[i][2];
+						rgb_pixels_half[i * 3 + 2] = float_to_half_non_neg_no_nan_inf(block_pixels[i][2]);
+					}
+
+					bool status = astc_hdr_enc_block(&rgb_pixels[0], m_params.m_uastc_hdr_options, all_results);
+					if (!status)
+					{
+						any_failures = true;
+						continue;
+					}
+
+					double best_err = 1e+30f;
+					int best_result_index = -1;
+
+					const double bc6h_err_weight = m_params.m_uastc_hdr_options.m_bc6h_err_weight;
+					const double astc_err_weight = (1.0f - bc6h_err_weight);
+
+					for (uint32_t i = 0; i < all_results.size(); i++)
+					{
+						basist::half_float unpacked_bc6h_block[4 * 4 * 3];
+						unpack_bc6h(&all_results[i].m_bc6h_block, unpacked_bc6h_block, false);
+
+						all_results[i].m_bc6h_block_error = compute_block_error(rgb_pixels_half, unpacked_bc6h_block, m_params.m_uastc_hdr_options);
+
+						double overall_err = (all_results[i].m_bc6h_block_error * bc6h_err_weight) + (all_results[i].m_best_block_error * astc_err_weight);
+
+						if ((!i) || (overall_err < best_err))
 						{
-							const uint32_t block_x = block_index % num_blocks_x;
-							const uint32_t block_y = block_index / num_blocks_x;
+							best_err = overall_err;
+							best_result_index = i;
+						}
+					}
 
-							vec4F block_pixels[16];
+					const astc_hdr_pack_results& best_results = all_results[best_result_index];
 
-							source_image.extract_block_clamped(&block_pixels[0], block_x * 4, block_y * 4, 4, 4);
+					astc_hdr_pack_results_to_block(dest_block, best_results);
 
-							basist::astc_blk& dest_block = *(basist::astc_blk*)tex.get_block_ptr(block_x, block_y);
+					// Verify that this block is valid UASTC HDR and we can successfully transcode it to BC6H.
+					// (Well, except in fastest mode.)
+					if (m_params.m_uastc_hdr_options.m_level > 0)
+					{
+						basist::bc6h_block transcoded_bc6h_blk;
+						bool transcode_results = astc_hdr_transcode_to_bc6h(dest_block, transcoded_bc6h_blk);
+						assert(transcode_results);
+						if ((!transcode_results) && (!any_failures))
+						{
+							error_printf("basis_compressor::encode_slices_to_uastc_hdr: UASTC HDR block transcode check failed!\n");
 
-							float rgb_pixels[16 * 3];
-							basist::half_float rgb_pixels_half[16 * 3];
-							for (uint32_t i = 0; i < 16; i++)
-							{
-								rgb_pixels[i * 3 + 0] = block_pixels[i][0];
-								rgb_pixels_half[i * 3 + 0] = float_to_half_non_neg_no_nan_inf(block_pixels[i][0]);
+							any_failures = true;
+							tbb::task::current_context()->cancel_group_execution();
+						}
+					}
 
-								rgb_pixels[i * 3 + 1] = block_pixels[i][1];
-								rgb_pixels_half[i * 3 + 1] = float_to_half_non_neg_no_nan_inf(block_pixels[i][1]);
+					if (m_params.m_debug)
+					{
+						// enc_stats has its own mutex
+						enc_stats.update(best_results);
 
-								rgb_pixels[i * 3 + 2] = block_pixels[i][2];
-								rgb_pixels_half[i * 3 + 2] = float_to_half_non_neg_no_nan_inf(block_pixels[i][2]);
-							}
+						uastc_blk_desc blk_desc;
+						clear_obj(blk_desc);
 
-							bool status = astc_hdr_enc_block(&rgb_pixels[0], m_params.m_uastc_hdr_options, all_results);
-							if (!status)
-							{
-								any_failures = true;
-								continue;
-							}
-
-							double best_err = 1e+30f;
-							int best_result_index = -1;
-
-							const double bc6h_err_weight = m_params.m_uastc_hdr_options.m_bc6h_err_weight;
-							const double astc_err_weight = (1.0f - bc6h_err_weight);
-
-							for (uint32_t i = 0; i < all_results.size(); i++)
-							{
-								basist::half_float unpacked_bc6h_block[4 * 4 * 3];
-								unpack_bc6h(&all_results[i].m_bc6h_block, unpacked_bc6h_block, false);
-
-								all_results[i].m_bc6h_block_error = compute_block_error(rgb_pixels_half, unpacked_bc6h_block, m_params.m_uastc_hdr_options);
-
-								double overall_err = (all_results[i].m_bc6h_block_error * bc6h_err_weight) + (all_results[i].m_best_block_error * astc_err_weight);
-
-								if ((!i) || (overall_err < best_err))
-								{
-									best_err = overall_err;
-									best_result_index = i;
-								}
-							}
-
-							const astc_hdr_pack_results& best_results = all_results[best_result_index];
-
-							astc_hdr_pack_results_to_block(dest_block, best_results);
-
-							// Verify that this block is valid UASTC HDR and we can successfully transcode it to BC6H.
-							// (Well, except in fastest mode.)
-							if (m_params.m_uastc_hdr_options.m_level > 0)
-							{
-								basist::bc6h_block transcoded_bc6h_blk;
-								bool transcode_results = astc_hdr_transcode_to_bc6h(dest_block, transcoded_bc6h_blk);
-								assert(transcode_results);
-								if ((!transcode_results) && (!any_failures))
-								{
-									error_printf("basis_compressor::encode_slices_to_uastc_hdr: UASTC HDR block transcode check failed!\n");
-
-									any_failures = true;
-									continue;
-								}
-							}
-
-							if (m_params.m_debug)
-							{
-								// enc_stats has its own mutex
-								enc_stats.update(best_results);
-
-								uastc_blk_desc blk_desc;
-								clear_obj(blk_desc);
-
-								blk_desc.m_solid_flag = best_results.m_is_solid;
-								if (!blk_desc.m_solid_flag)
-								{
-									blk_desc.m_num_partitions = best_results.m_best_blk.m_num_partitions;
-									blk_desc.m_cem_index = best_results.m_best_blk.m_color_endpoint_modes[0];
-									blk_desc.m_weight_ise_range = best_results.m_best_blk.m_weight_ise_range;
-									blk_desc.m_endpoint_ise_range = best_results.m_best_blk.m_endpoint_ise_range;
-								}
-
-								{
-									std::lock_guard<std::mutex> lck(unique_block_desc_mutex);
-
-									auto res = unique_block_descs.insert(std::make_pair(blk_desc, uastc_blk_desc_stats()));
-
-									(res.first)->second.m_count++;
-#ifdef UASTC_HDR_DEBUG_SAVE_CATEGORIZED_BLOCKS
-									(res.first)->second.m_blks.push_back(dest_block);
-#endif
-								}
-							}
-
-							total_blocks_processed++;
-
-							uint32_t val = total_blocks_processed;
-							if (((val & 1023) == 1023) && m_params.m_status_output)
-							{
-								debug_printf("basis_compressor::encode_slices_to_uastc_hdr: %3.1f%% done\n", static_cast<float>(val) * 100.0f / total_blocks);
-							}
+						blk_desc.m_solid_flag = best_results.m_is_solid;
+						if (!blk_desc.m_solid_flag)
+						{
+							blk_desc.m_num_partitions = best_results.m_best_blk.m_num_partitions;
+							blk_desc.m_cem_index = best_results.m_best_blk.m_color_endpoint_modes[0];
+							blk_desc.m_weight_ise_range = best_results.m_best_blk.m_weight_ise_range;
+							blk_desc.m_endpoint_ise_range = best_results.m_best_blk.m_endpoint_ise_range;
 						}
 
-#ifndef __EMSCRIPTEN__
-					});
+						{
+							std::lock_guard<std::mutex> lck(unique_block_desc_mutex);
+
+							auto res = unique_block_descs.insert(std::make_pair(blk_desc, uastc_blk_desc_stats()));
+
+							(res.first)->second.m_count++;
+#ifdef UASTC_HDR_DEBUG_SAVE_CATEGORIZED_BLOCKS
+							(res.first)->second.m_blks.push_back(dest_block);
 #endif
+						}
+					}
 
-			} // block_index_iter
+					++total_blocks_processed;
 
-#ifndef __EMSCRIPTEN__
-			m_params.m_pJob_pool->wait_for_all();
-#endif
-
-			if (any_failures)
-				return cECFailedEncodeUASTC;
+					uint32_t val = total_blocks_processed;
+					if (((val & 1023) == 1023) && m_params.m_status_output)
+					{
+						debug_printf("basis_compressor::encode_slices_to_uastc_hdr: %3.1f%% done\n", static_cast<float>(val) * 100.0f / total_blocks);
+					}
+				}
+			});
 
 			m_uastc_backend_output.m_slice_image_data[slice_index].resize(tex.get_size_in_bytes());
 			memcpy(&m_uastc_backend_output.m_slice_image_data[slice_index][0], tex.get_ptr(), tex.get_size_in_bytes());
 
 			m_uastc_backend_output.m_slice_image_crcs[slice_index] = basist::crc16(tex.get_ptr(), tex.get_size_in_bytes(), 0);
 
-		} // slice_index
+		}); // slice_index
+
+		if (any_failures) {
+			return cECFailedEncodeUASTC;
+		}
 
 		debug_printf("basis_compressor::encode_slices_to_uastc_hdr: Total time: %3.3f secs\n", tm.get_elapsed_secs());
 

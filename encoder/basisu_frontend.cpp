@@ -946,7 +946,7 @@ namespace basisu
 					quant_err.m_subblock_index = subblock_index;
 
 					{
-						decltype(mutex)::scoped_lock lock(mutex);
+						tbb::spin_mutex::scoped_lock lock(mutex);
 						m_subblock_endpoint_quant_err_vec.push_back(quant_err);
 					}
 				}
