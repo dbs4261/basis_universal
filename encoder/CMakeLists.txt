@@ -70,7 +70,8 @@ target_sources(basisu_encoder PRIVATE
     ${BASISU_ENCODER_PRIVATE_HEADERS}
 )
 
-target_compile_features(basisu_encoder PRIVATE cxx_std_11)
+# Braced initialization of struct containing members with default values requires c++14
+target_compile_features(basisu_encoder PRIVATE cxx_std_14)
 
 target_include_directories(basisu_encoder PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../>
@@ -116,10 +117,11 @@ target_compile_options(basisu_encoder PRIVATE
     # Were cppspmd to support emscripten, this flag would need to be added.
     # $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<PLATFORM_ID:Emscripten>>:-msimd128>
     $<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess -Wno-unused-variable>
+    $<$<PLATFORM_ID:Emscripten>:-mbulk-memory -matomics>
 )
 target_compile_options(basisu_encoder PUBLIC
-        $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>
-        $<$<PLATFORM_ID:Emscripten>:-Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>
+    $<$<PLATFORM_ID:Emscripten>:-Wno-unused-parameter>
 )
 
 install(TARGETS basisu_encoder EXPORT basisu-targets
