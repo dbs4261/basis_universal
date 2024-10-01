@@ -2060,7 +2060,7 @@ namespace basisu
 
 		uint32_t total_clusters = 0, total_parent_clusters = 0;
 
-		for (uint32_t idx; idx < initial_codebook.size(); ++idx) {
+		for (uint32_t idx = 0; idx < initial_codebook.size(); ++idx) {
 			total_clusters += (uint32_t)local_clusters[idx].size();
 			total_parent_clusters += (uint32_t)local_parent_clusters[idx].size();
 		} // idx
