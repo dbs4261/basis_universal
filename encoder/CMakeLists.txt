@@ -106,8 +106,6 @@ target_compile_definitions(basisu_encoder PUBLIC
 )
 target_compile_definitions(basisu_encoder PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
-        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 target_compile_options(basisu_encoder PRIVATE
@@ -122,6 +120,16 @@ target_compile_options(basisu_encoder PRIVATE
 target_compile_options(basisu_encoder PUBLIC
     $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>
     $<$<PLATFORM_ID:Emscripten>:-Wno-unused-parameter>
+)
+
+# Sanitizer options need to be added to both compile and link phases
+target_compile_options(basisu_encoder PRIVATE
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
+target_link_options(basisu_encoder PRIVATE
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 install(TARGETS basisu_encoder EXPORT basisu-targets

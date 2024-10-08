@@ -48,8 +48,6 @@ target_link_libraries(basisu_transcoder PRIVATE
 target_compile_definitions(basisu_transcoder PUBLIC $<$<CONFIG:Debug>:_DEBUG>)
 target_compile_definitions(basisu_transcoder PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:_LARGEFILE64_SOURCE=1;_FILE_OFFSET_BITS=64>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
-        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 target_compile_options(basisu_transcoder PRIVATE
@@ -60,6 +58,16 @@ target_compile_options(basisu_transcoder PRIVATE
 target_compile_options(basisu_transcoder PUBLIC
     $<$<CXX_COMPILER_ID:AppleClang,Clang>:-Wno-unknown-warning-option>
     $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value>
+)
+
+# Sanitizer options need to be added to both compile and link phases
+target_compile_options(basisu_transcoder PRIVATE
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
+target_link_options(basisu_transcoder PRIVATE
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
 )
 
 # Format Support
