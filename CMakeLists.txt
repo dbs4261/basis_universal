@@ -117,6 +117,15 @@ target_compile_options(basisu PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
 )
+# Sanitizer options need to be added to both compile and link phases
+target_compile_options(basisu PRIVATE
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
+target_link_options(basisu PRIVATE
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
 set_target_properties(basisu PROPERTIES
 	INTERPROCEDURAL_OPTIMIZATION
 		$<AND:$<BOOL:${CMAKE_CXX_LTO_SUPPORTED}>,$<NOT:$<CONFIG:Debug>>>
@@ -127,8 +136,9 @@ set_target_properties(basisu PROPERTIES
 )
 
 if (DEFINED CMAKE_STRIP AND UNIX AND NOT EMSCRIPTEN)
-	add_custom_command(TARGET basisu POST_BUILD COMMAND
-		"$<$<CONFIG:Release>: ${CMAKE_STRIP} $<$<NOT:$<BOOL:${APPLE}>>:-g>  -X -x $<TARGET_FILE:basisu>>")
+	message(STATUS "Found strip at: ${CMAKE_STRIP}")
+	add_custom_command(TARGET basisu POST_BUILD COMMAND_EXPAND_LISTS COMMAND
+			"$<$<CONFIG:Release>:${CMAKE_STRIP};$<$<NOT:$<BOOL:${APPLE}>>:-g>;-X;-x;$<TARGET_FILE:basisu>>")
 endif()
 
 install(TARGETS basisu

@@ -62,6 +62,16 @@ target_compile_options(basisu_transcoder PUBLIC
     $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-value>
 )
 
+# Sanitizer options need to be added to both compile and link phases
+target_compile_options(basisu_transcoder PRIVATE
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
+target_link_options(basisu_transcoder PRIVATE
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<BOOL:${BASISU_WITH_ASAN}>>:
+        -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined>
+)
+
 # Format Support
 target_compile_definitions(basisu_transcoder PRIVATE
     BASISD_SUPPORT_FXT1=$<BOOL:${BASISU_SUPPORT_FTX1}>
