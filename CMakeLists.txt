@@ -133,8 +133,9 @@ set_target_properties(basisu PROPERTIES
 )
 
 if (DEFINED CMAKE_STRIP AND UNIX AND NOT EMSCRIPTEN)
-	add_custom_command(TARGET basisu POST_BUILD COMMAND
-		"$<$<CONFIG:Release>: ${CMAKE_STRIP} $<$<NOT:$<BOOL:${APPLE}>>:-g>  -X -x $<TARGET_FILE:basisu>>")
+	message(STATUS "Found strip at: ${CMAKE_STRIP}")
+	add_custom_command(TARGET basisu POST_BUILD COMMAND_EXPAND_LISTS COMMAND
+			"$<$<CONFIG:Release>:${CMAKE_STRIP};$<$<NOT:$<BOOL:${APPLE}>>:-g>;-X;-x;$<TARGET_FILE:basisu>>")
 endif()
 
 install(TARGETS basisu
