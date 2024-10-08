@@ -52,7 +52,7 @@ target_compile_definitions(basisu_transcoder PRIVATE
 
 target_compile_options(basisu_transcoder PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-    $<$<CXX_COMPILER_ID:AppleClang,GNU,Clang>:-Wall -Wextra -Werror -Wno-unused-function>
+    $<$<CXX_COMPILER_ID:AppleClang,GNU,Clang>:-Wall -Wextra -Werror -Wno-unused-function -Wno-stringop-overflow>
     $<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
 )
 target_compile_options(basisu_transcoder PUBLIC
