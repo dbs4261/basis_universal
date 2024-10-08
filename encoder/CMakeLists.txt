@@ -110,7 +110,7 @@ target_compile_definitions(basisu_encoder PRIVATE
 
 target_compile_options(basisu_encoder PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror>
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Werror -fno-strict-aliasing>
     $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<PLATFORM_ID:Emscripten>>>>:-msse4.1 -Wno-unused-parameter>
     # Were cppspmd to support emscripten, this flag would need to be added.
     # $<$<AND:$<BOOL:${BASISU_WITH_SSE41}>,$<PLATFORM_ID:Emscripten>>:-msimd128>
